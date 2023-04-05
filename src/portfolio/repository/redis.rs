@@ -11,7 +11,11 @@ use crate::{
     statistic::summary::PositionSummariser,
 };
 use barter_integration::model::{Market, MarketId};
-use redis::{Commands, Connection, ErrorKind};
+use r2d2::{Pool, PooledConnection};
+use r2d2_redis::{
+    redis::{Commands, ErrorKind},
+    RedisConnectionManager,
+};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     fmt::{Debug, Formatter},
@@ -32,7 +36,7 @@ pub struct RedisRepository<Statistic>
 where
     Statistic: PositionSummariser + Serialize + DeserializeOwned,
 {
-    conn: Connection,
+    pool: Pool<RedisConnectionManager>,
     _statistic_marker: PhantomData<Statistic>,
 }
 
@@ -43,26 +47,25 @@ where
     fn set_open_position(&mut self, position: Position) -> Result<(), RepositoryError> {
         let position_string = serde_json::to_string(&position)?;
 
-        self.conn
-            .set(
-                format!("{}_{}", position.instrument_id, position.signal_id),
-                position_string,
-            )
-            .map_err(|_| RepositoryError::WriteError)
+        let mut conn = self.pool.get().unwrap();
+        conn.set(
+            format!("{}_{}", position.instrument_id, position.signal_id),
+            position_string,
+        )
+        .map_err(|_| RepositoryError::WriteError)
     }
 
     fn get_open_instrument_positions(
         &mut self,
         instrument_id: &InstrumentId,
     ) -> Result<Vec<Position>, RepositoryError> {
+        let mut conn = self.conn();
         let mut positions = vec![];
-        let keys: Vec<String> = self
-            .conn
+        let keys: Vec<String> = conn
             .keys(instrument_id)
             .map_err(|_| RepositoryError::ReadError)?;
         for k in keys {
-            let position_value: String =
-                self.conn.get(k).map_err(|_| RepositoryError::ReadError)?;
+            let position_value: String = conn.get(k).map_err(|_| RepositoryError::ReadError)?;
             let p = serde_json::from_str::<Position>(&position_value)?;
             positions.push(p);
         }
@@ -90,8 +93,8 @@ where
     fn remove_positions(&mut self, position_id: &String) -> Result<Vec<Position>, RepositoryError> {
         let position = self.get_open_instrument_positions(position_id)?;
 
-        self.conn
-            .del(position_id)
+        let mut conn = self.conn();
+        conn.del(position_id)
             .map_err(|_| RepositoryError::DeleteError)?;
 
         Ok(position)
@@ -102,17 +105,17 @@ where
         engine_id: Uuid,
         position: Position,
     ) -> Result<(), RepositoryError> {
-        self.conn
-            .lpush(
-                determine_exited_positions_id(engine_id),
-                serde_json::to_string(&position)?,
-            )
-            .map_err(|_| RepositoryError::WriteError)
+        let mut conn = self.conn();
+        conn.lpush(
+            determine_exited_positions_id(engine_id),
+            serde_json::to_string(&position)?,
+        )
+        .map_err(|_| RepositoryError::WriteError)
     }
 
     fn get_exited_positions(&mut self, engine_id: Uuid) -> Result<Vec<Position>, RepositoryError> {
-        self.conn
-            .get(determine_exited_positions_id(engine_id))
+        let mut conn = self.conn();
+        conn.get(determine_exited_positions_id(engine_id))
             .or_else(|err| match err.kind() {
                 ErrorKind::TypeError => Ok(Vec::<String>::new()),
                 _ => Err(RepositoryError::ReadError),
@@ -131,14 +134,14 @@ where
     fn set_balance(&mut self, engine_id: Uuid, balance: Balance) -> Result<(), RepositoryError> {
         let balance_string = serde_json::to_string(&balance)?;
 
-        self.conn
-            .set(Balance::balance_id(engine_id), balance_string)
+        let mut conn = self.conn();
+        conn.set(Balance::balance_id(engine_id), balance_string)
             .map_err(|_| RepositoryError::WriteError)
     }
 
     fn get_balance(&mut self, engine_id: Uuid) -> Result<Balance, RepositoryError> {
-        let balance_value: String = self
-            .conn
+        let mut conn = self.conn();
+        let balance_value: String = conn
             .get(Balance::balance_id(engine_id))
             .map_err(|_| RepositoryError::ReadError)?;
 
@@ -155,14 +158,14 @@ where
         market_id: MarketId,
         statistic: Statistic,
     ) -> Result<(), RepositoryError> {
-        self.conn
-            .set(market_id.0, serde_json::to_string(&statistic)?)
+        let mut conn = self.conn();
+        conn.set(market_id.0, serde_json::to_string(&statistic)?)
             .map_err(|_| RepositoryError::WriteError)
     }
 
     fn get_statistics(&mut self, market_id: &MarketId) -> Result<Statistic, RepositoryError> {
-        let statistics: String = self
-            .conn
+        let mut conn = self.conn();
+        let statistics: String = conn
             .get(&market_id.0)
             .map_err(|_| RepositoryError::ReadError)?;
 
@@ -184,11 +187,15 @@ where
     Statistic: PositionSummariser + Serialize + DeserializeOwned,
 {
     /// Constructs a new [`RedisRepository`] component using the provided Redis connection struct.
-    pub fn new(connection: Connection) -> Self {
+    pub fn new(pool: Pool<RedisConnectionManager>) -> Self {
         Self {
-            conn: connection,
+            pool,
             _statistic_marker: PhantomData::<Statistic>::default(),
         }
+    }
+
+    pub fn conn(&self) -> PooledConnection<RedisConnectionManager> {
+        self.pool.get().expect("Failed get a connection from pool")
     }
 
     /// Returns a [`RedisRepositoryBuilder`] instance.
@@ -197,11 +204,11 @@ where
     }
 
     /// Establish & return a Redis connection.
-    pub fn setup_redis_connection(cfg: Config) -> Connection {
-        redis::Client::open(cfg.uri)
-            .expect("Failed to create Redis client")
-            .get_connection()
-            .expect("Failed to connect to Redis")
+    pub fn setup_redis_connection(cfg: Config) -> Pool<RedisConnectionManager> {
+        let manager = RedisConnectionManager::new(cfg.uri).expect("Failed to create Redis client");
+        Pool::builder()
+            .build(manager)
+            .expect("Failed to create Redis client pool")
     }
 }
 
@@ -211,7 +218,7 @@ pub struct RedisRepositoryBuilder<Statistic>
 where
     Statistic: PositionSummariser + Serialize + DeserializeOwned,
 {
-    conn: Option<Connection>,
+    conn: Option<Pool<RedisConnectionManager>>,
     _statistic_marker: PhantomData<Statistic>,
 }
 
@@ -226,7 +233,7 @@ where
         }
     }
 
-    pub fn conn(self, value: Connection) -> Self {
+    pub fn conn(self, value: Pool<RedisConnectionManager>) -> Self {
         Self {
             conn: Some(value),
             ..self
@@ -235,7 +242,7 @@ where
 
     pub fn build(self) -> Result<RedisRepository<Statistic>, PortfolioError> {
         Ok(RedisRepository {
-            conn: self.conn.ok_or(PortfolioError::BuilderIncomplete("conn"))?,
+            pool: self.conn.ok_or(PortfolioError::BuilderIncomplete("conn"))?,
             _statistic_marker: PhantomData::<Statistic>::default(),
         })
     }
