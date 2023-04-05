@@ -36,10 +36,10 @@ impl OrderAllocator for DefaultAllocator {
 
         match order.decision {
             // Entry
-            Decision::Long => order.quantity = default_order_size * signal_strength.0,
+            Decision::Long => order.quantity = default_order_size * signal_strength.strength,
 
             // Entry
-            Decision::Short => order.quantity = -default_order_size * signal_strength.0,
+            Decision::Short => order.quantity = -default_order_size * signal_strength.strength,
 
             // Exit
             _ => order.quantity = 0.0 - position.as_ref().unwrap().quantity,
@@ -64,7 +64,7 @@ mod tests {
         let mut input_position = position();
         input_position.quantity = 100.0;
 
-        let input_signal_strength = SignalStrength(0.0);
+        let input_signal_strength = SignalStrength::new_with_strength(0.0);
 
         allocator.allocate_order(
             &mut input_order,
@@ -90,7 +90,7 @@ mod tests {
         let mut input_position = position();
         input_position.quantity = -100.0;
 
-        let input_signal_strength = SignalStrength(0.0);
+        let input_signal_strength = SignalStrength::new_with_strength(0.0);
 
         allocator.allocate_order(
             &mut input_order,
@@ -116,12 +116,12 @@ mod tests {
         input_order.market_meta.close = order_close;
         input_order.decision = Decision::Long;
 
-        let input_signal_strength = SignalStrength(1.0);
+        let input_signal_strength = SignalStrength::new_with_strength(1.0);
 
         allocator.allocate_order(&mut input_order, None, input_signal_strength);
 
         let actual_result = input_order.quantity;
-        let expected_result = (default_order_value / order_close) * input_signal_strength.0 as f64;
+        let expected_result = (default_order_value / order_close) * input_signal_strength.strength as f64;
 
         assert_eq!(actual_result, expected_result)
     }
@@ -138,13 +138,13 @@ mod tests {
         input_order.market_meta.close = order_close;
         input_order.decision = Decision::Long;
 
-        let input_signal_strength = SignalStrength(1.0);
+        let input_signal_strength = SignalStrength::new_with_strength(1.0);
 
         allocator.allocate_order(&mut input_order, None, input_signal_strength);
 
         let actual_result = input_order.quantity;
         let expected_order_size = ((default_order_value / order_close) * 10000.0).floor() / 10000.0;
-        let expected_result = expected_order_size * input_signal_strength.0 as f64;
+        let expected_result = expected_order_size * input_signal_strength.strength as f64;
 
         assert_ne!(actual_result, 0.0);
         assert_eq!(actual_result, expected_result)
@@ -162,12 +162,12 @@ mod tests {
         input_order.market_meta.close = order_close;
         input_order.decision = Decision::Short;
 
-        let input_signal_strength = SignalStrength(1.0);
+        let input_signal_strength = SignalStrength::new_with_strength(1.0);
 
         allocator.allocate_order(&mut input_order, None, input_signal_strength);
 
         let actual_result = input_order.quantity;
-        let expected_result = -(default_order_value / order_close) * input_signal_strength.0 as f64;
+        let expected_result = -(default_order_value / order_close) * input_signal_strength.strength as f64;
 
         assert_eq!(actual_result, expected_result)
     }
@@ -184,13 +184,13 @@ mod tests {
         input_order.market_meta.close = order_close;
         input_order.decision = Decision::Short;
 
-        let input_signal_strength = SignalStrength(1.0);
+        let input_signal_strength = SignalStrength::new_with_strength(1.0);
 
         allocator.allocate_order(&mut input_order, None, input_signal_strength);
 
         let actual_result = input_order.quantity;
         let expected_order_size = ((default_order_value / order_close) * 10000.0).floor() / 10000.0;
-        let expected_result = -expected_order_size * input_signal_strength.0;
+        let expected_result = -expected_order_size * input_signal_strength.strength;
 
         assert_ne!(actual_result, 0.0);
         assert_eq!(actual_result, expected_result)

@@ -971,7 +971,7 @@ pub mod tests {
         let mut input_signal = signal();
         input_signal
             .signals
-            .insert(Decision::Long, SignalStrength(1.0));
+            .insert(Decision::Long, SignalStrength::new_with_strength(1.0));
 
         let actual = portfolio.generate_order(&input_signal).unwrap().unwrap();
 
@@ -997,7 +997,7 @@ pub mod tests {
 
         input_signal
             .signals
-            .insert(Decision::Short, SignalStrength(1.0));
+            .insert(Decision::Short, SignalStrength::new_with_strength(1.0));
 
         let actual = portfolio.generate_order(&input_signal).unwrap().unwrap();
 
@@ -1029,7 +1029,7 @@ pub mod tests {
 
         input_signal
             .signals
-            .insert(Decision::CloseLong, SignalStrength(1.0));
+            .insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
 
         let actual = portfolio.generate_order(&input_signal).unwrap().unwrap();
 
@@ -1061,7 +1061,7 @@ pub mod tests {
 
         input_signal
             .signals
-            .insert(Decision::CloseShort, SignalStrength(1.0));
+            .insert(Decision::CloseShort, SignalStrength::new_with_strength(1.0));
 
         let actual = portfolio.generate_order(&input_signal).unwrap().unwrap();
 
@@ -1439,8 +1439,8 @@ pub mod tests {
 
         // Signals HashMap
         let mut signals = HashMap::with_capacity(4);
-        signals.insert(Decision::CloseLong, SignalStrength(1.0));
-        signals.insert(Decision::Short, SignalStrength(1.0));
+        signals.insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
+        signals.insert(Decision::Short, SignalStrength::new_with_strength(1.0));
 
         let actual = parse_signal_decisions(&position, &signals);
 
@@ -1457,8 +1457,8 @@ pub mod tests {
 
         // Signals HashMap
         let mut signals = HashMap::with_capacity(4);
-        signals.insert(Decision::Long, SignalStrength(1.0));
-        signals.insert(Decision::CloseShort, SignalStrength(1.0));
+        signals.insert(Decision::Long, SignalStrength::new_with_strength(1.0));
+        signals.insert(Decision::CloseShort, SignalStrength::new_with_strength(1.0));
 
         let actual = parse_signal_decisions(&position, &signals);
 
@@ -1475,10 +1475,10 @@ pub mod tests {
 
         // Signals HashMap
         let mut signals = HashMap::with_capacity(4);
-        signals.insert(Decision::CloseLong, SignalStrength(1.0));
-        signals.insert(Decision::CloseShort, SignalStrength(1.0));
-        signals.insert(Decision::Short, SignalStrength(1.0));
-        signals.insert(Decision::Long, SignalStrength(1.0));
+        signals.insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
+        signals.insert(Decision::CloseShort, SignalStrength::new_with_strength(1.0));
+        signals.insert(Decision::Short, SignalStrength::new_with_strength(1.0));
+        signals.insert(Decision::Long, SignalStrength::new_with_strength(1.0));
 
         let actual = parse_signal_decisions(&position, &signals);
 
@@ -1495,8 +1495,8 @@ pub mod tests {
 
         // Signals HashMap
         let mut signals = HashMap::with_capacity(4);
-        signals.insert(Decision::CloseShort, SignalStrength(1.0));
-        signals.insert(Decision::Long, SignalStrength(1.0));
+        signals.insert(Decision::CloseShort, SignalStrength::new_with_strength(1.0));
+        signals.insert(Decision::Long, SignalStrength::new_with_strength(1.0));
 
         let actual = parse_signal_decisions(&position, &signals);
 
@@ -1513,8 +1513,8 @@ pub mod tests {
 
         // Signals HashMap
         let mut signals = HashMap::with_capacity(4);
-        signals.insert(Decision::CloseLong, SignalStrength(1.0));
-        signals.insert(Decision::Short, SignalStrength(1.0));
+        signals.insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
+        signals.insert(Decision::Short, SignalStrength::new_with_strength(1.0));
 
         let actual = parse_signal_decisions(&position, &signals);
 
@@ -1531,10 +1531,10 @@ pub mod tests {
 
         // Signals HashMap
         let mut signals = HashMap::with_capacity(4);
-        signals.insert(Decision::CloseShort, SignalStrength(1.0));
-        signals.insert(Decision::CloseLong, SignalStrength(1.0));
-        signals.insert(Decision::Short, SignalStrength(1.0));
-        signals.insert(Decision::Long, SignalStrength(1.0));
+        signals.insert(Decision::CloseShort, SignalStrength::new_with_strength(1.0));
+        signals.insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
+        signals.insert(Decision::Short, SignalStrength::new_with_strength(1.0));
+        signals.insert(Decision::Long, SignalStrength::new_with_strength(1.0));
 
         let actual = parse_signal_decisions(&position, &signals);
 
@@ -1548,8 +1548,8 @@ pub mod tests {
 
         // Signals HashMap
         let mut signals = HashMap::with_capacity(4);
-        signals.insert(Decision::Long, SignalStrength(1.0));
-        signals.insert(Decision::CloseShort, SignalStrength(1.0));
+        signals.insert(Decision::Long, SignalStrength::new_with_strength(1.0));
+        signals.insert(Decision::CloseShort, SignalStrength::new_with_strength(1.0));
 
         let actual = parse_signal_decisions(&position, &signals);
 
@@ -1563,8 +1563,8 @@ pub mod tests {
 
         // Signals HashMap
         let mut signals = HashMap::with_capacity(4);
-        signals.insert(Decision::Short, SignalStrength(1.0));
-        signals.insert(Decision::CloseLong, SignalStrength(1.0));
+        signals.insert(Decision::Short, SignalStrength::new_with_strength(1.0));
+        signals.insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
 
         let actual = parse_signal_decisions(&position, &signals);
 
@@ -1578,10 +1578,10 @@ pub mod tests {
 
         // Signals HashMap
         let mut signals = HashMap::with_capacity(4);
-        signals.insert(Decision::Long, SignalStrength(1.0));
-        signals.insert(Decision::CloseShort, SignalStrength(1.0));
-        signals.insert(Decision::Short, SignalStrength(1.0));
-        signals.insert(Decision::CloseLong, SignalStrength(1.0));
+        signals.insert(Decision::Long, SignalStrength::new_with_strength(1.0));
+        signals.insert(Decision::CloseShort, SignalStrength::new_with_strength(1.0));
+        signals.insert(Decision::Short, SignalStrength::new_with_strength(1.0));
+        signals.insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
 
         let actual = parse_signal_decisions(&position, &signals);
 

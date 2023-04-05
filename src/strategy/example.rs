@@ -88,6 +88,6 @@ impl RSIStrategy {
 
     /// Calculates the [`SignalStrength`] of a particular [`Decision`].
     fn calculate_signal_strength() -> SignalStrength {
-        SignalStrength(1.0)
+        SignalStrength::new_with_strength(1.0)
     }
 }

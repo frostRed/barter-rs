@@ -67,7 +67,25 @@ impl Decision {
 
 /// Strength of an advisory [`Signal`] decision produced by [`SignalGenerator`] strategy.
 #[derive(Copy, Clone, PartialEq, PartialOrd, Debug, Deserialize, Serialize)]
-pub struct SignalStrength(pub f64);
+pub struct SignalStrength {
+    pub strength: f64,
+    pub fail_price: Option<f64>,
+}
+
+impl SignalStrength {
+    pub fn new(strength: f64, fail_price: f64) -> Self {
+        Self {
+            strength,
+            fail_price: Some(fail_price),
+        }
+    }
+    pub fn new_with_strength(strength: f64) -> Self {
+        Self {
+            strength,
+            fail_price: None,
+        }
+    }
+}
 
 /// Force exit Signal produced after an [`Engine`](crate::engine::Engine) receives a
 /// [`Command::ExitPosition`](crate::engine::Command) from an external source.
