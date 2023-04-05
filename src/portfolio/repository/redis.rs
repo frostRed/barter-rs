@@ -56,7 +56,7 @@ where
     }
 
     fn get_open_instrument_positions(
-        &mut self,
+        &self,
         instrument_id: &InstrumentId,
     ) -> Result<Vec<Position>, RepositoryError> {
         let mut conn = self.conn();
@@ -74,7 +74,7 @@ where
     }
 
     fn get_open_markets_positions<'a, Markets: Iterator<Item = &'a Market>>(
-        &mut self,
+        &self,
         engine_id: Uuid,
         markets: Markets,
     ) -> Result<Vec<Position>, RepositoryError> {
@@ -113,7 +113,7 @@ where
         .map_err(|_| RepositoryError::WriteError)
     }
 
-    fn get_exited_positions(&mut self, engine_id: Uuid) -> Result<Vec<Position>, RepositoryError> {
+    fn get_exited_positions(&self, engine_id: Uuid) -> Result<Vec<Position>, RepositoryError> {
         let mut conn = self.conn();
         conn.get(determine_exited_positions_id(engine_id))
             .or_else(|err| match err.kind() {
@@ -139,7 +139,7 @@ where
             .map_err(|_| RepositoryError::WriteError)
     }
 
-    fn get_balance(&mut self, engine_id: Uuid) -> Result<Balance, RepositoryError> {
+    fn get_balance(&self, engine_id: Uuid) -> Result<Balance, RepositoryError> {
         let mut conn = self.conn();
         let balance_value: String = conn
             .get(Balance::balance_id(engine_id))
@@ -163,7 +163,7 @@ where
             .map_err(|_| RepositoryError::WriteError)
     }
 
-    fn get_statistics(&mut self, market_id: &MarketId) -> Result<Statistic, RepositoryError> {
+    fn get_statistics(&self, market_id: &MarketId) -> Result<Statistic, RepositoryError> {
         let mut conn = self.conn();
         let statistics: String = conn
             .get(&market_id.0)

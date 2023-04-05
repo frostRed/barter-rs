@@ -41,7 +41,7 @@ impl<Statistic: PositionSummariser> PositionHandler for InMemoryRepository<Stati
     }
 
     fn get_open_instrument_positions(
-        &mut self,
+        &self,
         instrument_id: &InstrumentId,
     ) -> Result<Vec<Position>, RepositoryError> {
         Ok(self
@@ -52,7 +52,7 @@ impl<Statistic: PositionSummariser> PositionHandler for InMemoryRepository<Stati
     }
 
     fn get_open_markets_positions<'a, Markets: Iterator<Item = &'a Market>>(
-        &mut self,
+        &self,
         engine_id: Uuid,
         markets: Markets,
     ) -> Result<Vec<Position>, RepositoryError> {
@@ -95,7 +95,7 @@ impl<Statistic: PositionSummariser> PositionHandler for InMemoryRepository<Stati
         Ok(())
     }
 
-    fn get_exited_positions(&mut self, engine_id: Uuid) -> Result<Vec<Position>, RepositoryError> {
+    fn get_exited_positions(&self, engine_id: Uuid) -> Result<Vec<Position>, RepositoryError> {
         Ok(self
             .closed_positions
             .get(&determine_exited_positions_id(engine_id))
@@ -111,7 +111,7 @@ impl<Statistic: PositionSummariser> BalanceHandler for InMemoryRepository<Statis
         Ok(())
     }
 
-    fn get_balance(&mut self, engine_id: Uuid) -> Result<Balance, RepositoryError> {
+    fn get_balance(&self, engine_id: Uuid) -> Result<Balance, RepositoryError> {
         self.current_balances
             .get(&Balance::balance_id(engine_id))
             .copied()
@@ -129,7 +129,7 @@ impl<Statistic: PositionSummariser> StatisticHandler<Statistic> for InMemoryRepo
         Ok(())
     }
 
-    fn get_statistics(&mut self, market_id: &MarketId) -> Result<Statistic, RepositoryError> {
+    fn get_statistics(&self, market_id: &MarketId) -> Result<Statistic, RepositoryError> {
         self.statistics
             .get(market_id)
             .copied()

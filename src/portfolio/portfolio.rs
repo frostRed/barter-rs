@@ -305,14 +305,14 @@ where
     }
 
     fn get_open_instrument_positions(
-        &mut self,
+        &self,
         position_id: &InstrumentId,
     ) -> Result<Vec<Position>, RepositoryError> {
         self.repository.get_open_instrument_positions(position_id)
     }
 
     fn get_open_markets_positions<'a, Markets: Iterator<Item = &'a Market>>(
-        &mut self,
+        &self,
         _: Uuid,
         markets: Markets,
     ) -> Result<Vec<Position>, RepositoryError> {
@@ -332,7 +332,7 @@ where
             .set_exited_position(self.engine_id, position)
     }
 
-    fn get_exited_positions(&mut self, _: Uuid) -> Result<Vec<Position>, RepositoryError> {
+    fn get_exited_positions(&self, _: Uuid) -> Result<Vec<Position>, RepositoryError> {
         self.repository.get_exited_positions(self.engine_id)
     }
 }
@@ -353,7 +353,7 @@ where
         self.repository.set_statistics(market_id, statistic)
     }
 
-    fn get_statistics(&mut self, market_id: &MarketId) -> Result<Statistic, RepositoryError> {
+    fn get_statistics(&self, market_id: &MarketId) -> Result<Statistic, RepositoryError> {
         self.repository.get_statistics(market_id)
     }
 }
@@ -670,14 +670,14 @@ pub mod tests {
         }
 
         fn get_open_instrument_positions(
-            &mut self,
+            &self,
             position_id: &String,
         ) -> Result<Vec<Position>, RepositoryError> {
             self.get_open_position.unwrap()(position_id)
         }
 
         fn get_open_markets_positions<'a, Markets: Iterator<Item = &'a Market>>(
-            &mut self,
+            &self,
             engine_id: Uuid,
             markets: Markets,
         ) -> Result<Vec<Position>, RepositoryError> {
@@ -700,7 +700,7 @@ pub mod tests {
         }
 
         fn get_exited_positions(
-            &mut self,
+            &self,
             portfolio_id: Uuid,
         ) -> Result<Vec<Position>, RepositoryError> {
             self.get_exited_positions.unwrap()(portfolio_id)
@@ -717,7 +717,7 @@ pub mod tests {
             self.set_balance.unwrap()(engine_id, balance)
         }
 
-        fn get_balance(&mut self, engine_id: Uuid) -> Result<Balance, RepositoryError> {
+        fn get_balance(&self, engine_id: Uuid) -> Result<Balance, RepositoryError> {
             self.get_balance.unwrap()(engine_id)
         }
     }
@@ -731,7 +731,7 @@ pub mod tests {
             self.set_statistics.unwrap()(market_id, statistic)
         }
 
-        fn get_statistics(&mut self, market_id: &MarketId) -> Result<Statistic, RepositoryError> {
+        fn get_statistics(&self, market_id: &MarketId) -> Result<Statistic, RepositoryError> {
             self.get_statistics.unwrap()(market_id)
         }
     }

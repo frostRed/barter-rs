@@ -22,13 +22,13 @@ pub trait PositionHandler {
 
     /// Get all open [`Position`] using the [`InstrumentId`] provided.
     fn get_open_instrument_positions(
-        &mut self,
+        &self,
         instrument_id: &InstrumentId,
     ) -> Result<Vec<Position>, RepositoryError>;
 
     /// Get all open [`Position`]s associated with a Portfolio.
     fn get_open_markets_positions<'a, Markets: Iterator<Item = &'a Market>>(
-        &mut self,
+        &self,
         engine_id: Uuid,
         markets: Markets,
     ) -> Result<Vec<Position>, RepositoryError>;
@@ -47,7 +47,7 @@ pub trait PositionHandler {
     ) -> Result<(), RepositoryError>;
 
     /// Get every exited [`Position`] associated with the engine_id.
-    fn get_exited_positions(&mut self, engine_id: Uuid) -> Result<Vec<Position>, RepositoryError>;
+    fn get_exited_positions(&self, engine_id: Uuid) -> Result<Vec<Position>, RepositoryError>;
 }
 
 /// Handles the reading & writing of a Portfolio's current balance to/from the persistence layer.
@@ -55,7 +55,7 @@ pub trait BalanceHandler {
     /// Upsert the Portfolio [`Balance`] at the engine_id.
     fn set_balance(&mut self, engine_id: Uuid, balance: Balance) -> Result<(), RepositoryError>;
     /// Get the Portfolio [`Balance`] using the engine_id provided.
-    fn get_balance(&mut self, engine_id: Uuid) -> Result<Balance, RepositoryError>;
+    fn get_balance(&self, engine_id: Uuid) -> Result<Balance, RepositoryError>;
 }
 
 /// Handles the reading & writing of a Portfolio's statistics for each of it's
@@ -68,7 +68,7 @@ pub trait StatisticHandler<Statistic> {
         statistic: Statistic,
     ) -> Result<(), RepositoryError>;
     /// Get the market statistics using the [`MarketId`] provided.
-    fn get_statistics(&mut self, market_id: &MarketId) -> Result<Statistic, RepositoryError>;
+    fn get_statistics(&self, market_id: &MarketId) -> Result<Statistic, RepositoryError>;
 }
 
 /// Communicates a String represents a unique identifier for all a Portfolio's exited [`Position`]s.
