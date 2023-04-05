@@ -260,6 +260,7 @@ pub mod test_util {
     use barter_integration::model::{Exchange, Instrument, InstrumentKind, Side};
     use chrono::Utc;
     use std::ops::Add;
+    use uuid::Uuid;
 
     /// Build a [`MarketEvent`] of [`DataKind::PublicTrade`](DataKind) with the provided [`Side`].
     pub fn market_event_trade(side: Side) -> MarketEvent<DataKind> {
@@ -300,6 +301,7 @@ pub mod test_util {
     /// Build a [`Signal`].
     pub fn signal() -> Signal {
         Signal {
+            signal_id: Uuid::new_v4(),
             time: Utc::now(),
             exchange: Exchange::from("binance"),
             instrument: Instrument::from(("btc", "usdt", InstrumentKind::Spot)),

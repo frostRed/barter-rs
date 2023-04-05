@@ -5,6 +5,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use ta::{indicators::RelativeStrengthIndex, Next};
+use uuid::Uuid;
 
 /// Configuration for constructing a [`RSIStrategy`] via the new() constructor method.
 #[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Debug, Deserialize, Serialize)]
@@ -38,6 +39,7 @@ impl SignalGenerator for RSIStrategy {
         }
 
         Some(Signal {
+            signal_id: Uuid::new_v4(),
             time: Utc::now(),
             exchange: market.exchange.clone(),
             instrument: market.instrument.clone(),

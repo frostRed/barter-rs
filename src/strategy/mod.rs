@@ -4,6 +4,7 @@ use barter_integration::model::{Exchange, Instrument, Market};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use uuid::Uuid;
 
 /// Barter example RSI strategy [`SignalGenerator`] implementation.
 pub mod example;
@@ -18,6 +19,7 @@ pub trait SignalGenerator {
 /// possible [`Decision`]. Interpreted by an [`OrderGenerator`](crate::portfolio::OrderGenerator).
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Signal {
+    pub signal_id: Uuid,
     pub time: DateTime<Utc>,
     pub exchange: Exchange,
     pub instrument: Instrument,
@@ -71,6 +73,7 @@ pub struct SignalStrength(pub f64);
 /// [`Command::ExitPosition`](crate::engine::Command) from an external source.
 #[derive(Clone, Eq, PartialEq, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct SignalForceExit {
+    pub signal_id: Option<Uuid>,
     pub time: DateTime<Utc>,
     pub exchange: Exchange,
     pub instrument: Instrument,
@@ -96,6 +99,7 @@ impl SignalForceExit {
         I: Into<Instrument>,
     {
         Self {
+            signal_id: None,
             time: Utc::now(),
             exchange: exchange.into(),
             instrument: instrument.into(),

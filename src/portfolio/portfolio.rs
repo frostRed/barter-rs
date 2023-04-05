@@ -714,6 +714,7 @@ pub mod tests {
 
     fn new_signal_force_exit() -> SignalForceExit {
         SignalForceExit {
+            signal_id: None,
             time: Utc::now(),
             exchange: Exchange::from("binance"),
             instrument: Instrument::from(("eth", "usdt", InstrumentKind::Spot)),
