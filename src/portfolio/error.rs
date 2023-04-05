@@ -13,6 +13,9 @@ pub enum PortfolioError {
     #[error("Cannot exit Position with an entry decision FillEvent.")]
     CannotEnterPositionWithExitFill,
 
+    #[error("Cannot reduce Position that only can exit and enter new.")]
+    ExistingOppositePosition,
+
     #[error("Cannot exit Position with an entry decision FillEvent.")]
     CannotExitPositionWithEntryFill,
 

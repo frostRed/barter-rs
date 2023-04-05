@@ -342,7 +342,7 @@ pub mod test_util {
     /// Build a [`Position`].
     pub fn position() -> Position {
         Position {
-            position_id: "engine_id_trader_{}_{}_position".to_owned(),
+            instrument_id: "engine_id_trader_{}_{}_position".to_owned(),
             signal_id: Uuid::new_v4(),
             exchange: Exchange::from("binance"),
             instrument: Instrument::from(("eth", "usdt", InstrumentKind::Spot)),

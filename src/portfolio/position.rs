@@ -30,23 +30,39 @@ pub trait PositionExiter {
     fn exit(&mut self, balance: Balance, fill: &FillEvent) -> Result<PositionExit, PortfolioError>;
 }
 
+/// Communicates a String represents a unique [`Instrument`] identifier.
+pub type InstrumentId = String;
+
+/// Returns a identifier for a [`Instrument`]s given an engine_id, [`Exchange`] & [`Instrument`].
+pub fn determine_instrument_id(
+    engine_id: Uuid,
+    exchange: &Exchange,
+    instrument: &Instrument,
+) -> InstrumentId {
+    format!("{}_{}_{}_instrument", engine_id, exchange, instrument)
+}
+
 /// Communicates a String represents a unique [`Position`] identifier.
 pub type PositionId = String;
 
-/// Returns a unique identifier for a [`Position`] given an engine_id, [`Exchange`] & [`Instrument`].
+/// Returns a unique identifier for a [`Position`] given an engine_id, [`Exchange`] & [`Instrument`], signal_id.
 pub fn determine_position_id(
     engine_id: Uuid,
     exchange: &Exchange,
     instrument: &Instrument,
+    signal_id: Uuid,
 ) -> PositionId {
-    format!("{}_{}_{}_position", engine_id, exchange, instrument)
+    format!(
+        "{}_{}_{}_{}_position",
+        engine_id, exchange, instrument, signal_id
+    )
 }
 
 /// Data encapsulating the state of an ongoing or closed [`Position`].
 #[derive(Clone, PartialEq, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct Position {
     /// Unique identifier for a [`Position`] generated from an engine_id, [`Exchange`] & [`Instrument`].
-    pub position_id: PositionId,
+    pub instrument_id: InstrumentId,
 
     /// Created by which signal
     pub signal_id: Uuid,
@@ -126,7 +142,7 @@ impl PositionEnterer for Position {
         let unrealised_profit_loss = -enter_fees_total * 2.0;
 
         Ok(Position {
-            position_id: determine_position_id(engine_id, &fill.exchange, &fill.instrument),
+            instrument_id: determine_instrument_id(engine_id, &fill.exchange, &fill.instrument),
             signal_id: fill.signal_id,
             exchange: fill.exchange.clone(),
             instrument: fill.instrument.clone(),
@@ -268,7 +284,7 @@ impl Position {
 /// Builder to construct [`Position`] instances.
 #[derive(Debug, Default)]
 pub struct PositionBuilder {
-    pub position_id: Option<PositionId>,
+    pub position_id: Option<InstrumentId>,
     pub signal_id: Option<Uuid>,
     pub exchange: Option<Exchange>,
     pub instrument: Option<Instrument>,
@@ -294,7 +310,7 @@ impl PositionBuilder {
         Self::default()
     }
 
-    pub fn position_id(self, value: PositionId) -> Self {
+    pub fn position_id(self, value: InstrumentId) -> Self {
         Self {
             position_id: Some(value),
             ..self
@@ -429,7 +445,7 @@ impl PositionBuilder {
 
     pub fn build(self) -> Result<Position, PortfolioError> {
         Ok(Position {
-            position_id: self
+            instrument_id: self
                 .position_id
                 .ok_or(PortfolioError::BuilderIncomplete("position_id"))?,
             signal_id: self
@@ -528,7 +544,7 @@ pub struct PositionUpdate {
 impl From<&mut Position> for PositionUpdate {
     fn from(updated_position: &mut Position) -> Self {
         Self {
-            position_id: updated_position.position_id.clone(),
+            position_id: updated_position.instrument_id.clone(),
             update_time: updated_position.meta.update_time,
             current_symbol_price: updated_position.current_symbol_price,
             current_value_gross: updated_position.current_value_gross,
@@ -570,7 +586,7 @@ impl TryFrom<&mut Position> for PositionExit {
 
     fn try_from(exited_position: &mut Position) -> Result<Self, Self::Error> {
         Ok(Self {
-            position_id: exited_position.position_id.clone(),
+            position_id: exited_position.instrument_id.clone(),
             exit_time: exited_position.meta.update_time,
             exit_balance: exited_position
                 .meta

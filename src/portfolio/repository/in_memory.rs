@@ -1,6 +1,6 @@
 use crate::{
     portfolio::{
-        position::{determine_position_id, Position, PositionId},
+        position::{determine_instrument_id, InstrumentId, Position},
         repository::{
             determine_exited_positions_id, error::RepositoryError, BalanceHandler, PositionHandler,
             StatisticHandler,
@@ -19,7 +19,7 @@ use uuid::Uuid;
 /// **Careful in production - no fault tolerant guarantees!**
 #[derive(Debug, Default)]
 pub struct InMemoryRepository<Statistic: PositionSummariser> {
-    open_positions: HashMap<PositionId, Position>,
+    open_positions: HashMap<InstrumentId, HashMap<Uuid, Position>>,
     closed_positions: HashMap<String, Vec<Position>>,
     current_balances: HashMap<BalanceId, Balance>,
     statistics: HashMap<MarketId, Statistic>,
@@ -27,41 +27,55 @@ pub struct InMemoryRepository<Statistic: PositionSummariser> {
 
 impl<Statistic: PositionSummariser> PositionHandler for InMemoryRepository<Statistic> {
     fn set_open_position(&mut self, position: Position) -> Result<(), RepositoryError> {
-        self.open_positions
-            .insert(position.position_id.clone(), position);
+        let instrument_id = position.instrument_id.clone();
+        let signal_id = position.signal_id;
+
+        if let Some(positions) = self.open_positions.get_mut(&instrument_id) {
+            positions.insert(signal_id, position);
+        } else {
+            let mut positions = HashMap::new();
+            positions.insert(signal_id, position);
+            self.open_positions.insert(instrument_id, positions);
+        }
         Ok(())
     }
 
-    fn get_open_position(
+    fn get_open_instrument_positions(
         &mut self,
-        position_id: &PositionId,
-    ) -> Result<Option<Position>, RepositoryError> {
-        Ok(self.open_positions.get(position_id).map(Position::clone))
+        instrument_id: &InstrumentId,
+    ) -> Result<Vec<Position>, RepositoryError> {
+        Ok(self
+            .open_positions
+            .get(instrument_id)
+            .map(|p| p.values().map(Position::clone).collect())
+            .unwrap_or(vec![]))
     }
 
-    fn get_open_positions<'a, Markets: Iterator<Item = &'a Market>>(
+    fn get_open_markets_positions<'a, Markets: Iterator<Item = &'a Market>>(
         &mut self,
         engine_id: Uuid,
         markets: Markets,
     ) -> Result<Vec<Position>, RepositoryError> {
-        Ok(markets
-            .filter_map(|market| {
-                self.open_positions
-                    .get(&determine_position_id(
-                        engine_id,
-                        &market.exchange,
-                        &market.instrument,
-                    ))
-                    .map(Position::clone)
-            })
-            .collect())
+        let mut positions = vec![];
+        for market in markets {
+            let position_id =
+                determine_instrument_id(engine_id, &market.exchange, &market.instrument);
+            if let Some(p) = self.open_positions.get(&position_id) {
+                positions.append(&mut p.values().map(Position::clone).collect());
+            }
+        }
+        Ok(positions)
     }
 
-    fn remove_position(
+    fn remove_positions(
         &mut self,
-        position_id: &String,
-    ) -> Result<Option<Position>, RepositoryError> {
-        Ok(self.open_positions.remove(position_id))
+        instrument_id: &String,
+    ) -> Result<Vec<Position>, RepositoryError> {
+        let positions = self
+            .open_positions
+            .remove(instrument_id)
+            .ok_or(RepositoryError::DeleteError)?;
+        Ok(positions.values().map(Position::clone).collect())
     }
 
     fn set_exited_position(

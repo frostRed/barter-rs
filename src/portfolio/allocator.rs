@@ -7,11 +7,12 @@ use serde::{Deserialize, Serialize};
 /// Allocates an appropriate [`OrderEvent`] quantity.
 pub trait OrderAllocator {
     /// Returns an [`OrderEvent`] with a calculated order quantity based on the input order,
-    /// [`SignalStrength`] and potential existing [`Position`].
-    fn allocate_order(
+    /// [`SignalStrength`] and potential all existing [`Position`]s.
+    fn allocate_order<'a, Positions: Iterator<Item = &'a Position>>(
         &self,
         order: &mut OrderEvent,
-        position: Option<&Position>,
+        instrument_positions: Positions,
+
         signal_strength: SignalStrength,
     );
 }
@@ -24,10 +25,10 @@ pub struct DefaultAllocator {
 }
 
 impl OrderAllocator for DefaultAllocator {
-    fn allocate_order(
+    fn allocate_order<'a, Positions: Iterator<Item = &'a Position>>(
         &self,
         order: &mut OrderEvent,
-        position: Option<&Position>,
+        instrument_positions: Positions,
         signal_strength: SignalStrength,
     ) {
         // Calculate exact order_size, then round it to a more appropriate decimal place
@@ -42,7 +43,13 @@ impl OrderAllocator for DefaultAllocator {
             Decision::Short => order.quantity = -default_order_size * signal_strength.strength,
 
             // Exit
-            _ => order.quantity = 0.0 - position.as_ref().unwrap().quantity,
+            _ => {
+                order.quantity = 0.0
+                    - instrument_positions
+                        .into_iter()
+                        .map(|p| p.quantity)
+                        .sum::<f64>()
+            }
         }
     }
 }
@@ -68,7 +75,7 @@ mod tests {
 
         allocator.allocate_order(
             &mut input_order,
-            Some(&input_position),
+            vec![input_position.clone()].iter(),
             input_signal_strength,
         );
 
@@ -94,7 +101,7 @@ mod tests {
 
         allocator.allocate_order(
             &mut input_order,
-            Some(&input_position),
+            vec![input_position.clone()].iter(),
             input_signal_strength,
         );
 
@@ -118,7 +125,7 @@ mod tests {
 
         let input_signal_strength = SignalStrength::new_with_strength(1.0);
 
-        allocator.allocate_order(&mut input_order, None, input_signal_strength);
+        allocator.allocate_order(&mut input_order, vec![].iter(), input_signal_strength);
 
         let actual_result = input_order.quantity;
         let expected_result =
@@ -141,7 +148,7 @@ mod tests {
 
         let input_signal_strength = SignalStrength::new_with_strength(1.0);
 
-        allocator.allocate_order(&mut input_order, None, input_signal_strength);
+        allocator.allocate_order(&mut input_order, vec![].iter(), input_signal_strength);
 
         let actual_result = input_order.quantity;
         let expected_order_size = ((default_order_value / order_close) * 10000.0).floor() / 10000.0;
@@ -165,7 +172,7 @@ mod tests {
 
         let input_signal_strength = SignalStrength::new_with_strength(1.0);
 
-        allocator.allocate_order(&mut input_order, None, input_signal_strength);
+        allocator.allocate_order(&mut input_order, vec![].iter(), input_signal_strength);
 
         let actual_result = input_order.quantity;
         let expected_result =
@@ -188,7 +195,7 @@ mod tests {
 
         let input_signal_strength = SignalStrength::new_with_strength(1.0);
 
-        allocator.allocate_order(&mut input_order, None, input_signal_strength);
+        allocator.allocate_order(&mut input_order, vec![].iter(), input_signal_strength);
 
         let actual_result = input_order.quantity;
         let expected_order_size = ((default_order_value / order_close) * 10000.0).floor() / 10000.0;

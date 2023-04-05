@@ -1,5 +1,5 @@
 use crate::portfolio::{
-    position::{Position, PositionId},
+    position::{InstrumentId, Position},
     repository::error::RepositoryError,
     Balance,
 };
@@ -17,27 +17,27 @@ pub mod redis;
 
 /// Handles the reading & writing of a [`Position`] to/from the persistence layer.
 pub trait PositionHandler {
-    /// Upsert the open [`Position`] using it's [`PositionId`].
+    /// Upsert the open [`Position`] using it's [`InstrumentId`].
     fn set_open_position(&mut self, position: Position) -> Result<(), RepositoryError>;
 
-    /// Get an open [`Position`] using the [`PositionId`] provided.
-    fn get_open_position(
+    /// Get all open [`Position`] using the [`InstrumentId`] provided.
+    fn get_open_instrument_positions(
         &mut self,
-        position_id: &PositionId,
-    ) -> Result<Option<Position>, RepositoryError>;
+        instrument_id: &InstrumentId,
+    ) -> Result<Vec<Position>, RepositoryError>;
 
     /// Get all open [`Position`]s associated with a Portfolio.
-    fn get_open_positions<'a, Markets: Iterator<Item = &'a Market>>(
+    fn get_open_markets_positions<'a, Markets: Iterator<Item = &'a Market>>(
         &mut self,
         engine_id: Uuid,
         markets: Markets,
     ) -> Result<Vec<Position>, RepositoryError>;
 
-    /// Remove the [`Position`] at the [`PositionId`].
-    fn remove_position(
+    /// Remove all [`Position`]s at the [`InstrumentId`].
+    fn remove_positions(
         &mut self,
-        position_id: &PositionId,
-    ) -> Result<Option<Position>, RepositoryError>;
+        instrument_id: &InstrumentId,
+    ) -> Result<Vec<Position>, RepositoryError>;
 
     /// Append an exited [`Position`] to the Portfolio's exited position list.
     fn set_exited_position(

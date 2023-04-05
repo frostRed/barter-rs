@@ -1,7 +1,7 @@
 use crate::{
     portfolio::{
         error::PortfolioError,
-        position::{determine_position_id, Position, PositionId},
+        position::{determine_instrument_id, InstrumentId, Position},
         repository::{
             determine_exited_positions_id, error::RepositoryError, BalanceHandler, PositionHandler,
             StatisticHandler,
@@ -44,44 +44,51 @@ where
         let position_string = serde_json::to_string(&position)?;
 
         self.conn
-            .set(position.position_id, position_string)
+            .set(
+                format!("{}_{}", position.instrument_id, position.signal_id),
+                position_string,
+            )
             .map_err(|_| RepositoryError::WriteError)
     }
 
-    fn get_open_position(
+    fn get_open_instrument_positions(
         &mut self,
-        position_id: &PositionId,
-    ) -> Result<Option<Position>, RepositoryError> {
-        let position_value: String = self
+        instrument_id: &InstrumentId,
+    ) -> Result<Vec<Position>, RepositoryError> {
+        let mut positions = vec![];
+        let keys: Vec<String> = self
             .conn
-            .get(position_id)
+            .keys(instrument_id)
             .map_err(|_| RepositoryError::ReadError)?;
+        for k in keys {
+            let position_value: String =
+                self.conn.get(k).map_err(|_| RepositoryError::ReadError)?;
+            let p = serde_json::from_str::<Position>(&position_value)?;
+            positions.push(p);
+        }
 
-        Ok(Some(serde_json::from_str::<Position>(&position_value)?))
+        Ok(positions)
     }
 
-    fn get_open_positions<'a, Markets: Iterator<Item = &'a Market>>(
+    fn get_open_markets_positions<'a, Markets: Iterator<Item = &'a Market>>(
         &mut self,
         engine_id: Uuid,
         markets: Markets,
     ) -> Result<Vec<Position>, RepositoryError> {
-        markets
-            .filter_map(|market| {
-                self.get_open_position(&determine_position_id(
-                    engine_id,
-                    &market.exchange,
-                    &market.instrument,
-                ))
-                .transpose()
-            })
-            .collect()
+        let mut positions = vec![];
+        for market in markets {
+            let mut p = self.get_open_instrument_positions(&determine_instrument_id(
+                engine_id,
+                &market.exchange,
+                &market.instrument,
+            ))?;
+            positions.append(&mut p);
+        }
+        Ok(positions)
     }
 
-    fn remove_position(
-        &mut self,
-        position_id: &String,
-    ) -> Result<Option<Position>, RepositoryError> {
-        let position = self.get_open_position(position_id)?;
+    fn remove_positions(&mut self, position_id: &String) -> Result<Vec<Position>, RepositoryError> {
+        let position = self.get_open_instrument_positions(position_id)?;
 
         self.conn
             .del(position_id)
