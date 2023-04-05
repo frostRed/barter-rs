@@ -313,6 +313,7 @@ pub mod test_util {
     /// Build an [`OrderEvent`] to buy 1.0 contract.
     pub fn order_event() -> OrderEvent {
         OrderEvent {
+            signal_id: Uuid::new_v4(),
             time: Utc::now(),
             exchange: Exchange::from("binance"),
             instrument: Instrument::from(("eth", "usdt", InstrumentKind::Spot)),
@@ -326,6 +327,7 @@ pub mod test_util {
     /// Build a [`FillEvent`] for a single bought contract.
     pub fn fill_event() -> FillEvent {
         FillEvent {
+            signal_id: Uuid::new_v4(),
             time: Utc::now(),
             exchange: Exchange::from("binance"),
             instrument: Instrument::from(("eth", "usdt", InstrumentKind::Spot)),
@@ -341,6 +343,7 @@ pub mod test_util {
     pub fn position() -> Position {
         Position {
             position_id: "engine_id_trader_{}_{}_position".to_owned(),
+            signal_id: Uuid::new_v4(),
             exchange: Exchange::from("binance"),
             instrument: Instrument::from(("eth", "usdt", InstrumentKind::Spot)),
             meta: Default::default(),

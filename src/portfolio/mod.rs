@@ -68,6 +68,7 @@ pub trait FillUpdater {
 /// open a trade.
 #[derive(Clone, PartialEq, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct OrderEvent {
+    pub signal_id: Uuid,
     pub time: DateTime<Utc>,
     pub exchange: Exchange,
     pub instrument: Instrument,
@@ -108,6 +109,7 @@ impl Default for OrderType {
 /// Builder to construct OrderEvent instances.
 #[derive(Debug, Default)]
 pub struct OrderEventBuilder {
+    pub signal_id: Option<Uuid>,
     pub time: Option<DateTime<Utc>>,
     pub exchange: Option<Exchange>,
     pub instrument: Option<Instrument>,
@@ -120,6 +122,13 @@ pub struct OrderEventBuilder {
 impl OrderEventBuilder {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn signal_id(self, value: Uuid) -> Self {
+        Self {
+            signal_id: Some(value),
+            ..self
+        }
     }
 
     pub fn time(self, value: DateTime<Utc>) -> Self {
@@ -173,6 +182,9 @@ impl OrderEventBuilder {
 
     pub fn build(self) -> Result<OrderEvent, PortfolioError> {
         Ok(OrderEvent {
+            signal_id: self
+                .signal_id
+                .ok_or(PortfolioError::BuilderIncomplete("signal_id"))?,
             time: self.time.ok_or(PortfolioError::BuilderIncomplete("time"))?,
             exchange: self
                 .exchange

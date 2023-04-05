@@ -25,6 +25,7 @@ impl ExecutionClient for SimulatedExecution {
         let fill_value_gross = SimulatedExecution::calculate_fill_value_gross(order);
 
         Ok(FillEvent {
+            signal_id: order.signal_id,
             time: Utc::now(),
             exchange: order.exchange.clone(),
             instrument: order.instrument.clone(),

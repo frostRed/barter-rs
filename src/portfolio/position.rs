@@ -48,6 +48,9 @@ pub struct Position {
     /// Unique identifier for a [`Position`] generated from an engine_id, [`Exchange`] & [`Instrument`].
     pub position_id: PositionId,
 
+    /// Created by which signal
+    pub signal_id: Uuid,
+
     /// Metadata detailing trace UUIDs, timestamps & equity associated with entering, updating & exiting.
     pub meta: PositionMeta,
 
@@ -124,6 +127,7 @@ impl PositionEnterer for Position {
 
         Ok(Position {
             position_id: determine_position_id(engine_id, &fill.exchange, &fill.instrument),
+            signal_id: fill.signal_id,
             exchange: fill.exchange.clone(),
             instrument: fill.instrument.clone(),
             meta: metadata,
@@ -265,6 +269,7 @@ impl Position {
 #[derive(Debug, Default)]
 pub struct PositionBuilder {
     pub position_id: Option<PositionId>,
+    pub signal_id: Option<Uuid>,
     pub exchange: Option<Exchange>,
     pub instrument: Option<Instrument>,
     pub meta: Option<PositionMeta>,
@@ -292,6 +297,13 @@ impl PositionBuilder {
     pub fn position_id(self, value: PositionId) -> Self {
         Self {
             position_id: Some(value),
+            ..self
+        }
+    }
+
+    pub fn signal_id(self, value: Uuid) -> Self {
+        Self {
+            signal_id: Some(value),
             ..self
         }
     }
@@ -420,6 +432,9 @@ impl PositionBuilder {
             position_id: self
                 .position_id
                 .ok_or(PortfolioError::BuilderIncomplete("position_id"))?,
+            signal_id: self
+                .signal_id
+                .ok_or(PortfolioError::BuilderIncomplete("signal_id"))?,
             exchange: self
                 .exchange
                 .ok_or(PortfolioError::BuilderIncomplete("exchange"))?,

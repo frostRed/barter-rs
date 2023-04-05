@@ -3,6 +3,7 @@ use barter_integration::model::{Exchange, Instrument};
 use chrono::{DateTime, Utc};
 use error::ExecutionError;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 /// Barter execution module specific errors.
 pub mod error;
@@ -20,6 +21,7 @@ pub trait ExecutionClient {
 /// so it can apply updates.
 #[derive(Clone, PartialEq, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct FillEvent {
+    pub signal_id: Uuid,
     pub time: DateTime<Utc>,
     pub exchange: Exchange,
     pub instrument: Instrument,
@@ -68,6 +70,7 @@ pub type FeeAmount = f64;
 /// Builder to construct [FillEvent] instances.
 #[derive(Debug, Default)]
 pub struct FillEventBuilder {
+    pub signal_id: Option<Uuid>,
     pub time: Option<DateTime<Utc>>,
     pub exchange: Option<Exchange>,
     pub instrument: Option<Instrument>,
@@ -81,6 +84,13 @@ pub struct FillEventBuilder {
 impl FillEventBuilder {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn signal_id(self, value: Uuid) -> Self {
+        Self {
+            signal_id: Some(value),
+            ..self
+        }
     }
 
     pub fn time(self, value: DateTime<Utc>) -> Self {
@@ -141,6 +151,9 @@ impl FillEventBuilder {
 
     pub fn build(self) -> Result<FillEvent, ExecutionError> {
         Ok(FillEvent {
+            signal_id: self
+                .signal_id
+                .ok_or(ExecutionError::BuilderIncomplete("signal_id"))?,
             time: self.time.ok_or(ExecutionError::BuilderIncomplete("time"))?,
             exchange: self
                 .exchange

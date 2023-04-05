@@ -135,6 +135,7 @@ where
 
         // Construct mutable OrderEvent that can be modified by Allocation & Risk management
         let mut order = OrderEvent {
+            signal_id: signal.signal_id,
             time: Utc::now(),
             exchange: signal.exchange.clone(),
             instrument: signal.instrument.clone(),
@@ -174,6 +175,7 @@ where
         };
 
         Ok(Some(OrderEvent {
+            signal_id: signal.signal_id.unwrap_or(Uuid::new_v4()),
             time: Utc::now(),
             exchange: signal.exchange,
             instrument: signal.instrument,
