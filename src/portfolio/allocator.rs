@@ -121,7 +121,8 @@ mod tests {
         allocator.allocate_order(&mut input_order, None, input_signal_strength);
 
         let actual_result = input_order.quantity;
-        let expected_result = (default_order_value / order_close) * input_signal_strength.strength as f64;
+        let expected_result =
+            (default_order_value / order_close) * input_signal_strength.strength as f64;
 
         assert_eq!(actual_result, expected_result)
     }
@@ -167,7 +168,8 @@ mod tests {
         allocator.allocate_order(&mut input_order, None, input_signal_strength);
 
         let actual_result = input_order.quantity;
-        let expected_result = -(default_order_value / order_close) * input_signal_strength.strength as f64;
+        let expected_result =
+            -(default_order_value / order_close) * input_signal_strength.strength as f64;
 
         assert_eq!(actual_result, expected_result)
     }

@@ -180,12 +180,23 @@ where
                     }
 
                     Event::Signal(signal) => {
-                        if let Some(order) = self
+                        let (close_signal, open_order) = self
                             .portfolio
                             .lock()
                             .generate_order(&signal)
-                            .expect("failed to generate order")
-                        {
+                            .expect("failed to generate order");
+                        if let Some(close_signal) = close_signal {
+                            if let Some(order) = self
+                                .portfolio
+                                .lock()
+                                .generate_exit_order(close_signal)
+                                .expect("failed to generate forced exit order")
+                            {
+                                self.event_tx.send(Event::OrderNew(order.clone()));
+                                self.event_q.push_back(Event::OrderNew(order));
+                            }
+                        }
+                        if let Some(order) = open_order {
                             self.event_tx.send(Event::OrderNew(order.clone()));
                             self.event_q.push_back(Event::OrderNew(order));
                         }

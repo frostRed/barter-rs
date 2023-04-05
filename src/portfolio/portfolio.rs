@@ -114,7 +114,10 @@ where
     RiskManager: OrderEvaluator,
     Statistic: Initialiser + PositionSummariser,
 {
-    fn generate_order(&mut self, signal: &Signal) -> Result<Option<OrderEvent>, PortfolioError> {
+    fn generate_order(
+        &mut self,
+        signal: &Signal,
+    ) -> Result<(Option<SignalForceExit>, Option<OrderEvent>), PortfolioError> {
         // Determine the position_id & associated Option<Position> related to input SignalEvent
         let position_id =
             determine_position_id(self.engine_id, &signal.exchange, &signal.instrument);
@@ -122,35 +125,41 @@ where
 
         // If signal is advising to open a new Position rather than close one, check we have cash
         if position.is_none() && self.no_cash_to_enter_new_position()? {
-            return Ok(None);
+            return Ok((None, None));
         }
 
         // Parse signals from Strategy to determine net signal decision & associated strength
         let position = position.as_ref();
-        let (signal_decision, signal_strength) =
-            match parse_signal_decisions(&position, &signal.signals) {
-                None => return Ok(None),
-                Some(net_signal) => net_signal,
-            };
+        let (close_signal, open_signal) = parse_signal_decisions(&position, &signal.signals);
 
-        // Construct mutable OrderEvent that can be modified by Allocation & Risk management
-        let mut order = OrderEvent {
-            signal_id: signal.signal_id,
-            time: Utc::now(),
+        let signal_force_exit = close_signal.map(|_| SignalForceExit {
+            signal_id: Some(signal.signal_id),
+            time: signal.time,
             exchange: signal.exchange.clone(),
             instrument: signal.instrument.clone(),
-            market_meta: signal.market_meta,
-            decision: *signal_decision,
-            quantity: 0.0,
-            order_type: OrderType::default(),
-        };
+        });
+        return Ok((
+            signal_force_exit,
+            open_signal
+                .map(|(signal_decision, signal_strength)| {
+                    let mut order = OrderEvent {
+                        signal_id: signal.signal_id,
+                        time: Utc::now(),
+                        exchange: signal.exchange.clone(),
+                        instrument: signal.instrument.clone(),
+                        market_meta: signal.market_meta,
+                        decision: *signal_decision,
+                        quantity: 0.0,
+                        order_type: OrderType::default(),
+                    };
 
-        // Manage OrderEvent size allocation
-        self.allocation_manager
-            .allocate_order(&mut order, position, *signal_strength);
-
-        // Manage global risk when evaluating OrderEvent - keep the same, refine or cancel
-        Ok(self.risk_manager.evaluate_order(order))
+                    // Manage OrderEvent size allocation
+                    self.allocation_manager
+                        .allocate_order(&mut order, position, *signal_strength);
+                    self.risk_manager.evaluate_order(order)
+                })
+                .flatten(),
+        ));
     }
 
     fn generate_exit_order(
@@ -522,7 +531,7 @@ where
 
 /// Parses an incoming [`Signal`]'s signals map. Determines what the net signal [`Decision`]
 /// will be, and it's associated [`SignalStrength`].
-pub fn parse_signal_decisions<'a>(
+pub fn parse_net_signal_decisions<'a>(
     position: &'a Option<&Position>,
     signals: &'a HashMap<Decision, SignalStrength>,
 ) -> Option<(&'a Decision, &'a SignalStrength)> {
@@ -547,6 +556,39 @@ pub fn parse_signal_decisions<'a>(
         (None, Some(signal_short)) => Some(signal_short),
         _ => None,
     }
+}
+
+pub fn parse_signal_decisions<'a>(
+    position: &'a Option<&Position>,
+    signals: &'a HashMap<Decision, SignalStrength>,
+) -> (
+    Option<(&'a Decision, &'a SignalStrength)>,
+    Option<(&'a Decision, &'a SignalStrength)>,
+) {
+    // Determine the presence of signals in the provided signals HashMap
+    let signal_close_long = signals.get_key_value(&Decision::CloseLong);
+    let signal_long = signals.get_key_value(&Decision::Long);
+    let signal_close_short = signals.get_key_value(&Decision::CloseShort);
+    let signal_short = signals.get_key_value(&Decision::Short);
+
+    // If an existing Position exists, close signals first
+    let close_signal = match position {
+        None => None,
+        Some(position) => match position.side {
+            Side::Buy if signal_close_long.is_some() => signal_close_long,
+            Side::Sell if signal_close_short.is_some() => signal_close_short,
+            _ => None,
+        },
+    };
+
+    // Also check for open signals
+    let open_signal = match (signal_long, signal_short) {
+        (Some(signal_long), None) => Some(signal_long),
+        (None, Some(signal_short)) => Some(signal_short),
+        _ => None,
+    };
+
+    (close_signal, open_signal)
 }
 
 #[cfg(test)]
@@ -926,9 +968,9 @@ pub mod tests {
         // Input SignalEvent
         let input_signal = signal();
 
-        let actual = portfolio.generate_order(&input_signal).unwrap();
+        let (close_signal, actual) = portfolio.generate_order(&input_signal).unwrap();
 
-        assert!(actual.is_none())
+        assert!(close_signal.is_none() && actual.is_none())
     }
 
     #[test]
@@ -948,9 +990,9 @@ pub mod tests {
         // Input SignalEvent
         let input_signal = signal();
 
-        let actual = portfolio.generate_order(&input_signal).unwrap();
+        let (close_signal, actual) = portfolio.generate_order(&input_signal).unwrap();
 
-        assert!(actual.is_none())
+        assert!(close_signal.is_none() && actual.is_none())
     }
 
     #[test]
@@ -973,9 +1015,9 @@ pub mod tests {
             .signals
             .insert(Decision::Long, SignalStrength::new_with_strength(1.0));
 
-        let actual = portfolio.generate_order(&input_signal).unwrap().unwrap();
+        let (_close_signal, actual) = portfolio.generate_order(&input_signal).unwrap();
 
-        assert_eq!(actual.decision, Decision::Long)
+        assert_eq!(actual.unwrap().decision, Decision::Long)
     }
 
     #[test]
@@ -999,9 +1041,9 @@ pub mod tests {
             .signals
             .insert(Decision::Short, SignalStrength::new_with_strength(1.0));
 
-        let actual = portfolio.generate_order(&input_signal).unwrap().unwrap();
+        let (_close_signal, actual) = portfolio.generate_order(&input_signal).unwrap();
 
-        assert_eq!(actual.decision, Decision::Short)
+        assert_eq!(actual.unwrap().decision, Decision::Short)
     }
 
     #[test]
@@ -1031,9 +1073,9 @@ pub mod tests {
             .signals
             .insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
 
-        let actual = portfolio.generate_order(&input_signal).unwrap().unwrap();
+        let (close_signal, actual) = portfolio.generate_order(&input_signal).unwrap();
 
-        assert_eq!(actual.decision, Decision::CloseLong)
+        assert!(close_signal.is_some() && actual.is_none())
     }
 
     #[test]
@@ -1063,9 +1105,9 @@ pub mod tests {
             .signals
             .insert(Decision::CloseShort, SignalStrength::new_with_strength(1.0));
 
-        let actual = portfolio.generate_order(&input_signal).unwrap().unwrap();
+        let (close_signal, actual) = portfolio.generate_order(&input_signal).unwrap();
 
-        assert_eq!(actual.decision, Decision::CloseShort)
+        assert!(close_signal.is_some() && actual.is_none())
     }
 
     #[test]
@@ -1442,9 +1484,12 @@ pub mod tests {
         signals.insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
         signals.insert(Decision::Short, SignalStrength::new_with_strength(1.0));
 
-        let actual = parse_signal_decisions(&position, &signals);
-
+        let actual = parse_net_signal_decisions(&position, &signals);
         assert_eq!(actual.unwrap().0, &Decision::CloseLong);
+
+        let (close_signal, actual) = parse_signal_decisions(&position, &signals);
+        assert_eq!(close_signal.unwrap().0, &Decision::CloseLong);
+        assert_eq!(actual.unwrap().0, &Decision::Short);
     }
 
     #[test]
@@ -1460,9 +1505,12 @@ pub mod tests {
         signals.insert(Decision::Long, SignalStrength::new_with_strength(1.0));
         signals.insert(Decision::CloseShort, SignalStrength::new_with_strength(1.0));
 
-        let actual = parse_signal_decisions(&position, &signals);
+        let actual = parse_net_signal_decisions(&position, &signals);
+        assert!(actual.is_none());
 
-        assert!(actual.is_none())
+        let (close_signal, actual) = parse_signal_decisions(&position, &signals);
+        assert_eq!(close_signal, None);
+        assert_eq!(actual.unwrap().0, &Decision::Long);
     }
 
     #[test]
@@ -1480,9 +1528,13 @@ pub mod tests {
         signals.insert(Decision::Short, SignalStrength::new_with_strength(1.0));
         signals.insert(Decision::Long, SignalStrength::new_with_strength(1.0));
 
-        let actual = parse_signal_decisions(&position, &signals);
+        let actual = parse_net_signal_decisions(&position, &signals);
 
         assert_eq!(actual.unwrap().0, &Decision::CloseLong);
+
+        let (close_signal, actual) = parse_signal_decisions(&position, &signals);
+        assert_eq!(close_signal.unwrap().0, &Decision::CloseLong);
+        assert_eq!(actual, None);
     }
 
     #[test]
@@ -1498,9 +1550,13 @@ pub mod tests {
         signals.insert(Decision::CloseShort, SignalStrength::new_with_strength(1.0));
         signals.insert(Decision::Long, SignalStrength::new_with_strength(1.0));
 
-        let actual = parse_signal_decisions(&position, &signals);
+        let actual = parse_net_signal_decisions(&position, &signals);
 
         assert_eq!(actual.unwrap().0, &Decision::CloseShort);
+
+        let (close_signal, actual) = parse_signal_decisions(&position, &signals);
+        assert_eq!(close_signal.unwrap().0, &Decision::CloseShort);
+        assert_eq!(actual.unwrap().0, &Decision::Long);
     }
 
     #[test]
@@ -1516,9 +1572,13 @@ pub mod tests {
         signals.insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
         signals.insert(Decision::Short, SignalStrength::new_with_strength(1.0));
 
-        let actual = parse_signal_decisions(&position, &signals);
+        let actual = parse_net_signal_decisions(&position, &signals);
 
-        assert!(actual.is_none())
+        assert!(actual.is_none());
+
+        let (close_signal, actual) = parse_signal_decisions(&position, &signals);
+        assert_eq!(close_signal, None);
+        assert_eq!(actual.unwrap().0, &Decision::Short);
     }
 
     #[test]
@@ -1536,9 +1596,13 @@ pub mod tests {
         signals.insert(Decision::Short, SignalStrength::new_with_strength(1.0));
         signals.insert(Decision::Long, SignalStrength::new_with_strength(1.0));
 
-        let actual = parse_signal_decisions(&position, &signals);
+        let actual = parse_net_signal_decisions(&position, &signals);
 
         assert_eq!(actual.unwrap().0, &Decision::CloseShort);
+
+        let (close_signal, actual) = parse_signal_decisions(&position, &signals);
+        assert_eq!(close_signal.unwrap().0, &Decision::CloseShort);
+        assert_eq!(actual, None);
     }
 
     #[test]
@@ -1551,8 +1615,12 @@ pub mod tests {
         signals.insert(Decision::Long, SignalStrength::new_with_strength(1.0));
         signals.insert(Decision::CloseShort, SignalStrength::new_with_strength(1.0));
 
-        let actual = parse_signal_decisions(&position, &signals);
+        let actual = parse_net_signal_decisions(&position, &signals);
 
+        assert_eq!(actual.unwrap().0, &Decision::Long);
+
+        let (close_signal, actual) = parse_signal_decisions(&position, &signals);
+        assert_eq!(close_signal, None);
         assert_eq!(actual.unwrap().0, &Decision::Long);
     }
 
@@ -1566,8 +1634,12 @@ pub mod tests {
         signals.insert(Decision::Short, SignalStrength::new_with_strength(1.0));
         signals.insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
 
-        let actual = parse_signal_decisions(&position, &signals);
+        let actual = parse_net_signal_decisions(&position, &signals);
 
+        assert_eq!(actual.unwrap().0, &Decision::Short);
+
+        let (close_signal, actual) = parse_signal_decisions(&position, &signals);
+        assert_eq!(close_signal, None);
         assert_eq!(actual.unwrap().0, &Decision::Short);
     }
 
@@ -1583,8 +1655,12 @@ pub mod tests {
         signals.insert(Decision::Short, SignalStrength::new_with_strength(1.0));
         signals.insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
 
-        let actual = parse_signal_decisions(&position, &signals);
+        let actual = parse_net_signal_decisions(&position, &signals);
 
+        assert_eq!(actual, None);
+
+        let (close_signal, actual) = parse_signal_decisions(&position, &signals);
+        assert_eq!(close_signal, None);
         assert_eq!(actual, None);
     }
 }

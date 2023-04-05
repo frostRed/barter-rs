@@ -46,7 +46,10 @@ pub trait MarketUpdater {
 /// May generate an [`OrderEvent`] from an input advisory [`Signal`].
 pub trait OrderGenerator {
     /// May generate an [`OrderEvent`] after analysing an input advisory [`Signal`].
-    fn generate_order(&mut self, signal: &Signal) -> Result<Option<OrderEvent>, PortfolioError>;
+    fn generate_order(
+        &mut self,
+        signal: &Signal,
+    ) -> Result<(Option<SignalForceExit>, Option<OrderEvent>), PortfolioError>;
 
     /// Generates an exit [`OrderEvent`] if there is an open [`Position`](position::Position)
     /// associated with the input [`SignalForceExit`]'s [`PositionId`](position::PositionId).
