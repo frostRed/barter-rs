@@ -321,6 +321,10 @@ where
             .get_open_markets_positions(self.engine_id, markets)
     }
 
+    fn get_all_open_positions(&self) -> Result<Vec<Position>, RepositoryError> {
+        self.repository.get_all_open_positions()
+    }
+
     fn remove_positions(
         &mut self,
         position_id: &InstrumentId,
@@ -638,6 +642,7 @@ pub mod tests {
         get_open_positions: Option<
             fn(engine_id: Uuid, markets: Vec<&Market>) -> Result<Vec<Position>, RepositoryError>,
         >,
+        get_all_open_positions: Option<fn() -> Result<Vec<Position>, RepositoryError>>,
         remove_position: Option<fn(engine_id: &String) -> Result<Vec<Position>, RepositoryError>>,
         set_exited_position:
             Option<fn(engine_id: Uuid, position: Position) -> Result<(), RepositoryError>>,
@@ -683,6 +688,10 @@ pub mod tests {
             markets: Markets,
         ) -> Result<Vec<Position>, RepositoryError> {
             self.get_open_positions.unwrap()(engine_id, markets.into_iter().collect())
+        }
+
+        fn get_all_open_positions(&self) -> Result<Vec<Position>, RepositoryError> {
+            self.get_all_open_positions.unwrap()()
         }
 
         fn remove_positions(

@@ -26,12 +26,15 @@ pub trait PositionHandler {
         instrument_id: &InstrumentId,
     ) -> Result<Vec<Position>, RepositoryError>;
 
-    /// Get all open [`Position`]s associated with a Portfolio.
+    /// Get open [`Position`]s associated with some markets.
     fn get_open_markets_positions<'a, Markets: Iterator<Item = &'a Market>>(
         &self,
         engine_id: Uuid,
         markets: Markets,
     ) -> Result<Vec<Position>, RepositoryError>;
+
+    /// Get all open [`Position`]s associated with a Portfolio.
+    fn get_all_open_positions(&self) -> Result<Vec<Position>, RepositoryError>;
 
     /// Remove all [`Position`]s at the [`InstrumentId`].
     fn remove_positions(

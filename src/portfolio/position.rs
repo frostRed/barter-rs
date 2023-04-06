@@ -39,7 +39,7 @@ pub fn determine_instrument_id(
     exchange: &Exchange,
     instrument: &Instrument,
 ) -> InstrumentId {
-    format!("{}_{}_{}_instrument", engine_id, exchange, instrument)
+    format!("instrument_{}_{}_{}", engine_id, exchange, instrument)
 }
 
 /// Communicates a String represents a unique [`Position`] identifier.
@@ -53,7 +53,7 @@ pub fn determine_position_id(
     signal_id: Uuid,
 ) -> PositionId {
     format!(
-        "{}_{}_{}_{}_position",
+        "position_{}_{}_{}_{}",
         engine_id, exchange, instrument, signal_id
     )
 }

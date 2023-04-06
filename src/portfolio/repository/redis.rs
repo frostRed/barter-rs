@@ -90,11 +90,29 @@ where
         Ok(positions)
     }
 
-    fn remove_positions(&mut self, position_id: &String) -> Result<Vec<Position>, RepositoryError> {
-        let position = self.get_open_instrument_positions(position_id)?;
+    fn get_all_open_positions(&self) -> Result<Vec<Position>, RepositoryError> {
+        let mut conn = self.conn();
+        let mut positions = vec![];
+        let keys: Vec<String> = conn
+            .keys("instrument_")
+            .map_err(|_| RepositoryError::ReadError)?;
+        for k in keys {
+            let position_value: String = conn.get(k).map_err(|_| RepositoryError::ReadError)?;
+            let p = serde_json::from_str::<Position>(&position_value)?;
+            positions.push(p);
+        }
+
+        Ok(positions)
+    }
+
+    fn remove_positions(
+        &mut self,
+        instrument_id: &String,
+    ) -> Result<Vec<Position>, RepositoryError> {
+        let position = self.get_open_instrument_positions(instrument_id)?;
 
         let mut conn = self.conn();
-        conn.del(position_id)
+        conn.del(instrument_id)
             .map_err(|_| RepositoryError::DeleteError)?;
 
         Ok(position)

@@ -67,6 +67,15 @@ impl<Statistic: PositionSummariser> PositionHandler for InMemoryRepository<Stati
         Ok(positions)
     }
 
+    fn get_all_open_positions(&self) -> Result<Vec<Position>, RepositoryError> {
+        let mut positions = vec![];
+        for p in self.open_positions.values() {
+            positions.append(&mut p.values().map(Position::clone).collect());
+        }
+
+        Ok(positions)
+    }
+
     fn remove_positions(
         &mut self,
         instrument_id: &String,
