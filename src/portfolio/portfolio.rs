@@ -89,14 +89,14 @@ where
         &mut self,
         market: &MarketEvent<DataKind>,
     ) -> Result<Option<PositionUpdate>, PortfolioError> {
-        // Determine the position_id associated to the input MarketEvent
-        let position_id =
+        // Determine the instrument_id associated to the input MarketEvent
+        let instrument_id =
             determine_instrument_id(self.engine_id, &market.exchange, &market.instrument);
 
-        // Update Position if Portfolio has an open Position for that Symbol-Exchange combination
+        // Update every Position if Portfolio has an open Position for that Symbol-Exchange combination
         for mut position in self
             .repository
-            .get_open_instrument_positions(&position_id)?
+            .get_open_instrument_positions(&instrument_id)?
         {
             // Derive PositionUpdate event that communicates the open Position's change in state
             if let Some(position_update) = position.update(market) {
@@ -122,12 +122,12 @@ where
         &mut self,
         signal: &Signal,
     ) -> Result<(Option<SignalForceExit>, Option<OrderEvent>), PortfolioError> {
-        // Determine the position_id & associated Option<Position> related to input SignalEvent
-        let position_id =
+        // Determine the instrument_id & associated Option<Position> related to input SignalEvent
+        let instrument_id =
             determine_instrument_id(self.engine_id, &signal.exchange, &signal.instrument);
         let positions = self
             .repository
-            .get_open_instrument_positions(&position_id)?;
+            .get_open_instrument_positions(&instrument_id)?;
 
         // If signal is advising to open a new Position rather than close one, check we have cash
         if positions.is_empty() && self.no_cash_to_enter_new_position()? {
@@ -183,7 +183,7 @@ where
             .get_open_instrument_positions(&instrument_id)?;
         if positions.is_empty() {
             info!(
-                position_id = &*instrument_id,
+                instrument_id = &*instrument_id,
                 outcome = "no forced exit OrderEvent generated",
                 "cannot generate forced exit OrderEvent for a Position that isn't open"
             );
@@ -223,7 +223,7 @@ where
         let mut balance = self.repository.get_balance(self.engine_id)?;
         balance.time = fill.time;
 
-        // Determine the position_id that is related to the input FillEvent
+        // Determine the instrument_id that is related to the input FillEvent
         let instrument_id =
             determine_instrument_id(self.engine_id, &fill.exchange, &fill.instrument);
 
@@ -306,9 +306,9 @@ where
 
     fn get_open_instrument_positions(
         &self,
-        position_id: &InstrumentId,
+        instrument_id: &InstrumentId,
     ) -> Result<Vec<Position>, RepositoryError> {
-        self.repository.get_open_instrument_positions(position_id)
+        self.repository.get_open_instrument_positions(instrument_id)
     }
 
     fn get_open_markets_positions<'a, Markets: Iterator<Item = &'a Market>>(
@@ -326,9 +326,9 @@ where
 
     fn remove_positions(
         &mut self,
-        position_id: &InstrumentId,
+        instrument_id: &InstrumentId,
     ) -> Result<Vec<Position>, RepositoryError> {
-        self.repository.remove_positions(position_id)
+        self.repository.remove_positions(instrument_id)
     }
 
     fn set_exited_position(&mut self, _: Uuid, position: Position) -> Result<(), RepositoryError> {
@@ -621,7 +621,7 @@ pub mod tests {
     struct MockRepository<Statistic> {
         set_open_position: Option<fn(position: Position) -> Result<(), RepositoryError>>,
         get_open_position:
-            Option<fn(position_id: &String) -> Result<Vec<Position>, RepositoryError>>,
+            Option<fn(instrument_id: &String) -> Result<Vec<Position>, RepositoryError>>,
         get_open_positions: Option<
             fn(engine_id: Uuid, markets: Vec<&Market>) -> Result<Vec<Position>, RepositoryError>,
         >,
@@ -660,9 +660,9 @@ pub mod tests {
 
         fn get_open_instrument_positions(
             &self,
-            position_id: &String,
+            instrument_id: &String,
         ) -> Result<Vec<Position>, RepositoryError> {
-            self.get_open_position.unwrap()(position_id)
+            self.get_open_position.unwrap()(instrument_id)
         }
 
         fn get_open_markets_positions<'a, Markets: Iterator<Item = &'a Market>>(
@@ -679,9 +679,9 @@ pub mod tests {
 
         fn remove_positions(
             &mut self,
-            position_id: &String,
+            instrument_id: &String,
         ) -> Result<Vec<Position>, RepositoryError> {
-            self.remove_position.unwrap()(position_id)
+            self.remove_position.unwrap()(instrument_id)
         }
 
         fn set_exited_position(

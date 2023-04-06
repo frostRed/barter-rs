@@ -58,9 +58,9 @@ impl<Statistic: PositionSummariser> PositionHandler for InMemoryRepository<Stati
     ) -> Result<Vec<Position>, RepositoryError> {
         let mut positions = vec![];
         for market in markets {
-            let position_id =
+            let instrument_id =
                 determine_instrument_id(engine_id, &market.exchange, &market.instrument);
-            if let Some(p) = self.open_positions.get(&position_id) {
+            if let Some(p) = self.open_positions.get(&instrument_id) {
                 positions.append(&mut p.values().map(Position::clone).collect());
             }
         }
