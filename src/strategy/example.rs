@@ -1,9 +1,9 @@
-use super::{Decision, Signal, SignalGenerator, SignalStrength};
+use super::{Decision, Signal, SignalGenerator};
 use crate::data::MarketMeta;
+use crate::strategy::Suggest;
 use barter_data::event::{DataKind, MarketEvent};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use ta::{indicators::RelativeStrengthIndex, Next};
 use uuid::Uuid;
 
@@ -31,12 +31,8 @@ impl SignalGenerator for RSIStrategy {
         let rsi = self.rsi.next(candle_close);
 
         // Generate advisory signals map
-        let signals = RSIStrategy::generate_signals_map(rsi);
-
-        // If signals map is empty, return no SignalEvent
-        if signals.is_empty() {
-            return None;
-        }
+        // If signals is None, return no SignalEvent
+        let suggest = RSIStrategy::generate_signals_map(rsi)?;
 
         Some(Signal {
             signal_id: Uuid::new_v4(),
@@ -47,7 +43,7 @@ impl SignalGenerator for RSIStrategy {
                 close: candle_close,
                 time: market.exchange_time,
             },
-            signals,
+            suggest,
         })
     }
 }
@@ -61,33 +57,34 @@ impl RSIStrategy {
         Self { rsi: rsi_indicator }
     }
 
-    /// Given the latest RSI value for a symbol, generates a map containing the [`SignalStrength`] for
+    /// Given the latest RSI value for a symbol, generates a map containing the [`SuggestInfo`] for
     /// [`Decision`] under consideration.
-    fn generate_signals_map(rsi: f64) -> HashMap<Decision, SignalStrength> {
-        let mut signals = HashMap::with_capacity(4);
+    fn generate_signals_map(rsi: f64) -> Option<Suggest> {
         if rsi < 40.0 {
-            signals.insert(Decision::Long, RSIStrategy::calculate_signal_strength());
-        }
-        if rsi > 60.0 {
-            signals.insert(
-                Decision::CloseLong,
+            Some(Suggest::new(
+                Decision::Short,
                 RSIStrategy::calculate_signal_strength(),
-            );
-        }
-        if rsi > 60.0 {
-            signals.insert(Decision::Short, RSIStrategy::calculate_signal_strength());
-        }
-        if rsi < 40.0 {
-            signals.insert(
-                Decision::CloseShort,
+                None,
+                None,
+                true,
+                false,
+            ))
+        } else if rsi > 60.0 {
+            Some(Suggest::new(
+                Decision::Long,
                 RSIStrategy::calculate_signal_strength(),
-            );
+                None,
+                None,
+                true,
+                false,
+            ))
+        } else {
+            None
         }
-        signals
     }
 
-    /// Calculates the [`SignalStrength`] of a particular [`Decision`].
-    fn calculate_signal_strength() -> SignalStrength {
-        SignalStrength::new_with_strength(1.0)
+    /// Calculates the [`SuggestInfo`] of a particular [`Decision`].
+    fn calculate_signal_strength() -> f64 {
+        1.0
     }
 }

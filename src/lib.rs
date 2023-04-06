@@ -305,7 +305,7 @@ pub mod test_util {
             time: Utc::now(),
             exchange: Exchange::from("binance"),
             instrument: Instrument::from(("btc", "usdt", InstrumentKind::Spot)),
-            signals: Default::default(),
+            suggest: Default::default(),
             market_meta: Default::default(),
         }
     }

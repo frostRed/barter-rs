@@ -9,18 +9,19 @@ use super::{
     risk::OrderEvaluator,
     Balance, FillUpdater, MarketUpdater, OrderEvent, OrderGenerator, OrderType,
 };
+use crate::strategy::Suggest;
 use crate::{
     data::MarketMeta,
     event::Event,
     execution::FillEvent,
     statistic::summary::{Initialiser, PositionSummariser},
-    strategy::{Decision, Signal, SignalForceExit, SignalStrength},
+    strategy::{Decision, Signal, SignalForceExit, SuggestInfo},
 };
 use barter_data::event::{DataKind, MarketEvent};
 use barter_integration::model::{Market, MarketId, Side};
 use chrono::Utc;
 use serde::Serialize;
-use std::{collections::HashMap, marker::PhantomData};
+use std::marker::PhantomData;
 use tracing::info;
 use uuid::Uuid;
 
@@ -134,7 +135,7 @@ where
         }
 
         // Parse signals from Strategy to determine net signal decision & associated strength
-        let (close_signal, open_signal) = parse_signal_decisions(&positions, &signal.signals);
+        let (close_signal, open_signal) = parse_signal_suggest(&positions, &signal.suggest);
 
         let signal_force_exit = close_signal.map(|_| SignalForceExit {
             signal_id: Some(signal.signal_id),
@@ -142,32 +143,30 @@ where
             exchange: signal.exchange.clone(),
             instrument: signal.instrument.clone(),
         });
-        return Ok((
+        Ok((
             signal_force_exit,
-            open_signal
-                .map(|(signal_decision, signal_strength)| {
-                    let mut order = OrderEvent {
-                        signal_id: signal.signal_id,
-                        time: Utc::now(),
-                        exchange: signal.exchange.clone(),
-                        instrument: signal.instrument.clone(),
-                        market_meta: signal.market_meta,
-                        decision: *signal_decision,
-                        quantity: 0.0,
-                        order_type: OrderType::default(),
-                    };
+            open_signal.and_then(|(signal_decision, signal_strength)| {
+                let mut order = OrderEvent {
+                    signal_id: signal.signal_id,
+                    time: Utc::now(),
+                    exchange: signal.exchange.clone(),
+                    instrument: signal.instrument.clone(),
+                    market_meta: signal.market_meta,
+                    decision: signal_decision,
+                    quantity: 0.0,
+                    order_type: OrderType::default(),
+                };
 
-                    // Manage OrderEvent size allocation
-                    self.allocation_manager.allocate_order(
-                        &self.repository,
-                        &mut order,
-                        positions.iter(),
-                        *signal_strength,
-                    );
-                    self.risk_manager.evaluate_order(&self.repository, order)
-                })
-                .flatten(),
-        ));
+                // Manage OrderEvent size allocation
+                self.allocation_manager.allocate_order(
+                    &self.repository,
+                    &mut order,
+                    positions.iter(),
+                    *signal_strength,
+                );
+                self.risk_manager.evaluate_order(&self.repository, order)
+            }),
+        ))
     }
 
     fn generate_exit_order(
@@ -558,66 +557,50 @@ where
     }
 }
 
-/// Parses an incoming [`Signal`]'s signals map. Determines what the net signal [`Decision`]
-/// will be, and it's associated [`SignalStrength`].
-pub fn parse_net_signal_decisions<'a>(
-    positions: &'a Vec<Position>,
-    signals: &'a HashMap<Decision, SignalStrength>,
-) -> Option<(&'a Decision, &'a SignalStrength)> {
-    // Determine the presence of signals in the provided signals HashMap
-    let signal_close_long = signals.get_key_value(&Decision::CloseLong);
-    let signal_long = signals.get_key_value(&Decision::Long);
-    let signal_close_short = signals.get_key_value(&Decision::CloseShort);
-    let signal_short = signals.get_key_value(&Decision::Short);
-
-    // If an existing Position exists, check for net close signals
-    if let Some(position) = positions.first() {
-        return match position.side {
-            Side::Buy if signal_close_long.is_some() => signal_close_long,
-            Side::Sell if signal_close_short.is_some() => signal_close_short,
-            _ => None,
-        };
-    }
-
-    // Else check for net open signals
-    match (signal_long, signal_short) {
-        (Some(signal_long), None) => Some(signal_long),
-        (None, Some(signal_short)) => Some(signal_short),
-        _ => None,
-    }
-}
-
-pub fn parse_signal_decisions<'a>(
-    positions: &'a Vec<Position>,
-    signals: &'a HashMap<Decision, SignalStrength>,
+pub fn parse_signal_suggest<'a>(
+    positions: &'a [Position],
+    signal_suggest: &'a Suggest,
 ) -> (
-    Option<(&'a Decision, &'a SignalStrength)>,
-    Option<(&'a Decision, &'a SignalStrength)>,
+    Option<(Decision, &'a SuggestInfo)>,
+    Option<(Decision, &'a SuggestInfo)>,
 ) {
-    // Determine the presence of signals in the provided signals HashMap
-    let signal_close_long = signals.get_key_value(&Decision::CloseLong);
-    let signal_long = signals.get_key_value(&Decision::Long);
-    let signal_close_short = signals.get_key_value(&Decision::CloseShort);
-    let signal_short = signals.get_key_value(&Decision::Short);
+    match (signal_suggest, positions.first().map(|p| p.side)) {
+        (Suggest::SuggestLong(s), None) => (None, Some((Decision::Long, s))),
+        (Suggest::SuggestLong(s), Some(Side::Buy)) => (
+            None,
+            if s.re_enter {
+                Some((Decision::Long, s))
+            } else {
+                None
+            },
+        ),
+        (Suggest::SuggestLong(s), Some(Side::Sell)) => (
+            Some((Decision::CloseShort, s)),
+            if s.only_close_opposite {
+                None
+            } else {
+                Some((Decision::Long, s))
+            },
+        ),
 
-    // If an existing Position exists, close signals first
-    let close_signal = match positions.first() {
-        None => None,
-        Some(position) => match position.side {
-            Side::Buy if signal_close_long.is_some() => signal_close_long,
-            Side::Sell if signal_close_short.is_some() => signal_close_short,
-            _ => None,
-        },
-    };
-
-    // Also check for open signals
-    let open_signal = match (signal_long, signal_short) {
-        (Some(signal_long), None) => Some(signal_long),
-        (None, Some(signal_short)) => Some(signal_short),
-        _ => None,
-    };
-
-    (close_signal, open_signal)
+        (Suggest::SuggestShort(s), None) => (None, Some((Decision::Short, s))),
+        (Suggest::SuggestShort(s), Some(Side::Buy)) => (
+            Some((Decision::CloseLong, s)),
+            if s.only_close_opposite {
+                None
+            } else {
+                Some((Decision::Short, s))
+            },
+        ),
+        (Suggest::SuggestShort(s), Some(Side::Sell)) => (
+            None,
+            if s.re_enter {
+                Some((Decision::Short, s))
+            } else {
+                None
+            },
+        ),
+    }
 }
 
 #[cfg(test)]
@@ -1044,9 +1027,7 @@ pub mod tests {
 
         // Input SignalEvent
         let mut input_signal = signal();
-        input_signal
-            .signals
-            .insert(Decision::Long, SignalStrength::new_with_strength(1.0));
+        input_signal.suggest = Suggest::new_long(SuggestInfo::new_only_strength(1.0));
 
         let (_close_signal, actual) = portfolio.generate_order(&input_signal).unwrap();
 
@@ -1069,10 +1050,7 @@ pub mod tests {
 
         // Input SignalEvent
         let mut input_signal = signal();
-
-        input_signal
-            .signals
-            .insert(Decision::Short, SignalStrength::new_with_strength(1.0));
+        input_signal.suggest = Suggest::new_short(SuggestInfo::new_only_strength(1.0));
 
         let (_close_signal, actual) = portfolio.generate_order(&input_signal).unwrap();
 
@@ -1101,10 +1079,7 @@ pub mod tests {
 
         // Input SignalEvent
         let mut input_signal = signal();
-
-        input_signal
-            .signals
-            .insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
+        input_signal.suggest = Suggest::new_short(SuggestInfo::new_only_strength(1.0));
 
         let (close_signal, actual) = portfolio.generate_order(&input_signal).unwrap();
 
@@ -1133,10 +1108,7 @@ pub mod tests {
 
         // Input SignalEvent
         let mut input_signal = signal();
-
-        input_signal
-            .signals
-            .insert(Decision::CloseShort, SignalStrength::new_with_strength(1.0));
+        input_signal.suggest = Suggest::new_long(SuggestInfo::new_only_strength(1.0));
 
         let (close_signal, actual) = portfolio.generate_order(&input_signal).unwrap();
 
@@ -1513,17 +1485,10 @@ pub mod tests {
         position.side = Side::Buy;
         let position = vec![position];
 
-        // Signals HashMap
-        let mut signals = HashMap::with_capacity(4);
-        signals.insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
-        signals.insert(Decision::Short, SignalStrength::new_with_strength(1.0));
-
-        let actual = parse_net_signal_decisions(&position.as_ref(), &signals);
-        assert_eq!(actual.unwrap().0, &Decision::CloseLong);
-
-        let (close_signal, actual) = parse_signal_decisions(&position, &signals);
-        assert_eq!(close_signal.unwrap().0, &Decision::CloseLong);
-        assert_eq!(actual.unwrap().0, &Decision::Short);
+        let suggest = Suggest::new_short(SuggestInfo::new_only_strength(1.0));
+        let (close_signal, actual) = parse_signal_suggest(&position, &suggest);
+        assert_eq!(close_signal.unwrap().0, Decision::CloseLong);
+        assert_eq!(actual, None);
     }
 
     #[test]
@@ -1533,39 +1498,9 @@ pub mod tests {
         position.side = Side::Buy;
         let position = vec![position];
 
-        // Signals HashMap
-        let mut signals = HashMap::with_capacity(4);
-        signals.insert(Decision::Long, SignalStrength::new_with_strength(1.0));
-        signals.insert(Decision::CloseShort, SignalStrength::new_with_strength(1.0));
-
-        let actual = parse_net_signal_decisions(&position.as_ref(), &signals);
-        assert!(actual.is_none());
-
-        let (close_signal, actual) = parse_signal_decisions(&position, &signals);
+        let suggest = Suggest::new_long(SuggestInfo::new_only_strength(1.0));
+        let (close_signal, actual) = parse_signal_suggest(&position, &suggest);
         assert_eq!(close_signal, None);
-        assert_eq!(actual.unwrap().0, &Decision::Long);
-    }
-
-    #[test]
-    fn parse_signal_decisions_to_net_close_long_with_conflicting_signals() {
-        // Some(Position)
-        let mut position = position();
-        position.side = Side::Buy;
-        let position = vec![position];
-
-        // Signals HashMap
-        let mut signals = HashMap::with_capacity(4);
-        signals.insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
-        signals.insert(Decision::CloseShort, SignalStrength::new_with_strength(1.0));
-        signals.insert(Decision::Short, SignalStrength::new_with_strength(1.0));
-        signals.insert(Decision::Long, SignalStrength::new_with_strength(1.0));
-
-        let actual = parse_net_signal_decisions(&position.as_ref(), &signals);
-
-        assert_eq!(actual.unwrap().0, &Decision::CloseLong);
-
-        let (close_signal, actual) = parse_signal_decisions(&position, &signals);
-        assert_eq!(close_signal.unwrap().0, &Decision::CloseLong);
         assert_eq!(actual, None);
     }
 
@@ -1576,18 +1511,10 @@ pub mod tests {
         position.side = Side::Sell;
         let position = vec![position];
 
-        // Signals HashMap
-        let mut signals = HashMap::with_capacity(4);
-        signals.insert(Decision::CloseShort, SignalStrength::new_with_strength(1.0));
-        signals.insert(Decision::Long, SignalStrength::new_with_strength(1.0));
-
-        let actual = parse_net_signal_decisions(&position.as_ref(), &signals);
-
-        assert_eq!(actual.unwrap().0, &Decision::CloseShort);
-
-        let (close_signal, actual) = parse_signal_decisions(&position, &signals);
-        assert_eq!(close_signal.unwrap().0, &Decision::CloseShort);
-        assert_eq!(actual.unwrap().0, &Decision::Long);
+        let suggest = Suggest::new_long(SuggestInfo::new_only_strength(1.0));
+        let (close_signal, actual) = parse_signal_suggest(&position, &suggest);
+        assert_eq!(close_signal.unwrap().0, Decision::CloseShort);
+        assert_eq!(actual, None);
     }
 
     #[test]
@@ -1597,40 +1524,9 @@ pub mod tests {
         position.side = Side::Sell;
         let position = vec![position];
 
-        // Signals HashMap
-        let mut signals = HashMap::with_capacity(4);
-        signals.insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
-        signals.insert(Decision::Short, SignalStrength::new_with_strength(1.0));
-
-        let actual = parse_net_signal_decisions(&position.as_ref(), &signals);
-
-        assert!(actual.is_none());
-
-        let (close_signal, actual) = parse_signal_decisions(&position, &signals);
+        let suggest = Suggest::new_short(SuggestInfo::new_only_strength(1.0));
+        let (close_signal, actual) = parse_signal_suggest(&position, &suggest);
         assert_eq!(close_signal, None);
-        assert_eq!(actual.unwrap().0, &Decision::Short);
-    }
-
-    #[test]
-    fn parse_signal_decisions_to_net_close_short_with_conflicting_signals() {
-        // Some(Position)
-        let mut position = position();
-        position.side = Side::Sell;
-        let position = vec![position];
-
-        // Signals HashMap
-        let mut signals = HashMap::with_capacity(4);
-        signals.insert(Decision::CloseShort, SignalStrength::new_with_strength(1.0));
-        signals.insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
-        signals.insert(Decision::Short, SignalStrength::new_with_strength(1.0));
-        signals.insert(Decision::Long, SignalStrength::new_with_strength(1.0));
-
-        let actual = parse_net_signal_decisions(&position.as_ref(), &signals);
-
-        assert_eq!(actual.unwrap().0, &Decision::CloseShort);
-
-        let (close_signal, actual) = parse_signal_decisions(&position, &signals);
-        assert_eq!(close_signal.unwrap().0, &Decision::CloseShort);
         assert_eq!(actual, None);
     }
 
@@ -1638,55 +1534,19 @@ pub mod tests {
     fn parse_signal_decisions_to_net_long() {
         let position = vec![];
 
-        // Signals HashMap
-        let mut signals = HashMap::with_capacity(4);
-        signals.insert(Decision::Long, SignalStrength::new_with_strength(1.0));
-        signals.insert(Decision::CloseShort, SignalStrength::new_with_strength(1.0));
-
-        let actual = parse_net_signal_decisions(&position, &signals);
-
-        assert_eq!(actual.unwrap().0, &Decision::Long);
-
-        let (close_signal, actual) = parse_signal_decisions(&position, &signals);
+        let suggest = Suggest::new_long(SuggestInfo::new_only_strength(1.0));
+        let (close_signal, actual) = parse_signal_suggest(&position, &suggest);
         assert_eq!(close_signal, None);
-        assert_eq!(actual.unwrap().0, &Decision::Long);
+        assert_eq!(actual.unwrap().0, Decision::Long);
     }
 
     #[test]
     fn parse_signal_decisions_to_net_short() {
         let position: Vec<Position> = vec![];
 
-        // Signals HashMap
-        let mut signals = HashMap::with_capacity(4);
-        signals.insert(Decision::Short, SignalStrength::new_with_strength(1.0));
-        signals.insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
-
-        let actual = parse_net_signal_decisions(&position.as_ref(), &signals);
-
-        assert_eq!(actual.unwrap().0, &Decision::Short);
-
-        let (close_signal, actual) = parse_signal_decisions(&position, &signals);
+        let suggest = Suggest::new_short(SuggestInfo::new_only_strength(1.0));
+        let (close_signal, actual) = parse_signal_suggest(&position, &suggest);
         assert_eq!(close_signal, None);
-        assert_eq!(actual.unwrap().0, &Decision::Short);
-    }
-
-    #[test]
-    fn parse_signal_decisions_to_none_with_conflicting_signals() {
-        let position: Vec<Position> = vec![];
-
-        // Signals HashMap
-        let mut signals = HashMap::with_capacity(4);
-        signals.insert(Decision::Long, SignalStrength::new_with_strength(1.0));
-        signals.insert(Decision::CloseShort, SignalStrength::new_with_strength(1.0));
-        signals.insert(Decision::Short, SignalStrength::new_with_strength(1.0));
-        signals.insert(Decision::CloseLong, SignalStrength::new_with_strength(1.0));
-
-        let actual = parse_net_signal_decisions(&position.as_ref(), &signals);
-
-        assert_eq!(actual, None);
-
-        let (close_signal, actual) = parse_signal_decisions(&position, &signals);
-        assert_eq!(close_signal, None);
-        assert_eq!(actual, None);
+        assert_eq!(actual.unwrap().0, Decision::Short);
     }
 }

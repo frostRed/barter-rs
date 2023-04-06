@@ -3,7 +3,6 @@ use barter_data::event::{DataKind, MarketEvent};
 use barter_integration::model::{Exchange, Instrument, Market};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Barter example RSI strategy [`SignalGenerator`] implementation.
@@ -15,7 +14,7 @@ pub trait SignalGenerator {
     fn generate_signal(&mut self, market: &MarketEvent<DataKind>) -> Option<Signal>;
 }
 
-/// Advisory [`Signal`] for a [`Market`] detailing the [`SignalStrength`] associated with each
+/// Advisory [`Signal`] for a [`Market`] detailing the [`SuggestInfo`] associated with each
 /// possible [`Decision`]. Interpreted by an [`OrderGenerator`](crate::portfolio::OrderGenerator).
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Signal {
@@ -23,7 +22,7 @@ pub struct Signal {
     pub time: DateTime<Utc>,
     pub exchange: Exchange,
     pub instrument: Instrument,
-    pub signals: HashMap<Decision, SignalStrength>,
+    pub suggest: Suggest,
     /// Metadata propagated from the [`MarketEvent`] that yielded this [`Signal`].
     pub market_meta: MarketMeta,
 }
@@ -65,24 +64,87 @@ impl Decision {
     }
 }
 
-/// Strength of an advisory [`Signal`] decision produced by [`SignalGenerator`] strategy.
-#[derive(Copy, Clone, PartialEq, PartialOrd, Debug, Deserialize, Serialize)]
-pub struct SignalStrength {
-    pub strength: f64,
-    pub fail_price: Option<f64>,
+/// Only two possibilities of a [`Signal`]
+#[derive(Copy, Clone, PartialEq, Debug, Deserialize, Serialize)]
+pub enum Suggest {
+    SuggestLong(SuggestInfo),
+    SuggestShort(SuggestInfo),
 }
 
-impl SignalStrength {
-    pub fn new(strength: f64, fail_price: f64) -> Self {
-        Self {
+impl Suggest {
+    pub fn new(
+        decision: Decision,
+        strength: f64,
+        fail_price: Option<f64>,
+        target_price: Option<f64>,
+        only_close_opposite: bool,
+        re_enter: bool,
+    ) -> Self {
+        let suggest = SuggestInfo::new(
             strength,
-            fail_price: Some(fail_price),
+            fail_price,
+            target_price,
+            only_close_opposite,
+            re_enter,
+        );
+        match decision {
+            Decision::Long | Decision::CloseShort => Suggest::SuggestLong(suggest),
+            Decision::Short | Decision::CloseLong => Suggest::SuggestShort(suggest),
         }
     }
-    pub fn new_with_strength(strength: f64) -> Self {
+
+    pub fn new_long(suggest: SuggestInfo) -> Self {
+        Suggest::SuggestLong(suggest)
+    }
+
+    pub fn new_short(suggest: SuggestInfo) -> Self {
+        Suggest::SuggestShort(suggest)
+    }
+}
+
+impl Default for Suggest {
+    fn default() -> Self {
+        Self::new(Decision::Long, 1.0, None, None, true, false)
+    }
+}
+
+/// Suggestion information of an advisory [`Signal`] decision produced by [`SignalGenerator`] strategy.
+#[derive(Copy, Clone, PartialEq, PartialOrd, Debug, Deserialize, Serialize)]
+pub struct SuggestInfo {
+    pub strength: f64,
+    pub fail_price: Option<f64>,
+    pub target_price: Option<f64>,
+    // If true, the existing opposite position will be exited,
+    // and will not create this direction position
+    pub only_close_opposite: bool,
+    // If true, even if there is already a position in the same direction,
+    // another new position will be established
+    pub re_enter: bool,
+}
+
+impl SuggestInfo {
+    pub fn new(
+        strength: f64,
+        fail_price: Option<f64>,
+        target_price: Option<f64>,
+        only_close_opposite: bool,
+        re_enter: bool,
+    ) -> Self {
+        Self {
+            strength,
+            fail_price,
+            target_price,
+            only_close_opposite,
+            re_enter,
+        }
+    }
+    pub fn new_only_strength(strength: f64) -> Self {
         Self {
             strength,
             fail_price: None,
+            target_price: None,
+            only_close_opposite: true,
+            re_enter: false,
         }
     }
 }

@@ -4,7 +4,7 @@ use crate::{
         repository::{BalanceHandler, PositionHandler},
         OrderEvent,
     },
-    strategy::{Decision, SignalStrength},
+    strategy::{Decision, SuggestInfo},
 };
 use serde::{Deserialize, Serialize};
 
@@ -14,18 +14,18 @@ where
     Repository: PositionHandler + BalanceHandler,
 {
     /// Returns an [`OrderEvent`] with a calculated order quantity based on the input order,
-    /// [`SignalStrength`] and potential all existing [`Position`]s.
+    /// [`SuggestInfo`] and potential all existing [`Position`]s.
     fn allocate_order<'a, Positions: Iterator<Item = &'a Position>>(
         &self,
         repository: &Repository,
         order: &mut OrderEvent,
         instrument_positions: Positions,
-        signal_strength: SignalStrength,
+        signal_suggest_info: SuggestInfo,
     );
 }
 
 /// Default allocation manager that implements [`OrderAllocator`]. Order size is calculated by
-/// using the default_order_value, symbol close value, and [`SignalStrength`].
+/// using the default_order_value, symbol close value, and [`SuggestInfo`].
 #[derive(Copy, Clone, PartialEq, PartialOrd, Debug, Default, Deserialize, Serialize)]
 pub struct DefaultAllocator {
     pub default_order_value: f64,
@@ -40,7 +40,7 @@ where
         _repository: &Repository,
         order: &mut OrderEvent,
         instrument_positions: Positions,
-        signal_strength: SignalStrength,
+        signal_suggest_info: SuggestInfo,
     ) {
         // Calculate exact order_size, then round it to a more appropriate decimal place
         let default_order_size = self.default_order_value / order.market_meta.close;
@@ -48,10 +48,10 @@ where
 
         match order.decision {
             // Entry
-            Decision::Long => order.quantity = default_order_size * signal_strength.strength,
+            Decision::Long => order.quantity = default_order_size * signal_suggest_info.strength,
 
             // Entry
-            Decision::Short => order.quantity = -default_order_size * signal_strength.strength,
+            Decision::Short => order.quantity = -default_order_size * signal_suggest_info.strength,
 
             // Exit
             _ => {
@@ -88,7 +88,7 @@ mod tests {
         let mut input_position = position();
         input_position.quantity = 100.0;
 
-        let input_signal_strength = SignalStrength::new_with_strength(0.0);
+        let input_signal_strength = SuggestInfo::new_only_strength(0.0);
 
         allocator.allocate_order(
             &repository(),
@@ -115,7 +115,7 @@ mod tests {
         let mut input_position = position();
         input_position.quantity = -100.0;
 
-        let input_signal_strength = SignalStrength::new_with_strength(0.0);
+        let input_signal_strength = SuggestInfo::new_only_strength(0.0);
 
         allocator.allocate_order(
             &repository(),
@@ -142,7 +142,7 @@ mod tests {
         input_order.market_meta.close = order_close;
         input_order.decision = Decision::Long;
 
-        let input_signal_strength = SignalStrength::new_with_strength(1.0);
+        let input_signal_strength = SuggestInfo::new_only_strength(1.0);
 
         allocator.allocate_order(
             &repository(),
@@ -170,7 +170,7 @@ mod tests {
         input_order.market_meta.close = order_close;
         input_order.decision = Decision::Long;
 
-        let input_signal_strength = SignalStrength::new_with_strength(1.0);
+        let input_signal_strength = SuggestInfo::new_only_strength(1.0);
 
         allocator.allocate_order(
             &repository(),
@@ -199,7 +199,7 @@ mod tests {
         input_order.market_meta.close = order_close;
         input_order.decision = Decision::Short;
 
-        let input_signal_strength = SignalStrength::new_with_strength(1.0);
+        let input_signal_strength = SuggestInfo::new_only_strength(1.0);
 
         allocator.allocate_order(
             &repository(),
@@ -227,7 +227,7 @@ mod tests {
         input_order.market_meta.close = order_close;
         input_order.decision = Decision::Short;
 
-        let input_signal_strength = SignalStrength::new_with_strength(1.0);
+        let input_signal_strength = SuggestInfo::new_only_strength(1.0);
 
         allocator.allocate_order(
             &repository(),
