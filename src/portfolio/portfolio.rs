@@ -31,7 +31,7 @@ pub struct PortfolioLego<Repository, Allocator, RiskManager, Statistic>
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
     Allocator: OrderAllocator<Repository>,
-    RiskManager: OrderEvaluator,
+    RiskManager: OrderEvaluator<Repository>,
     Statistic: Initialiser + PositionSummariser,
 {
     /// Identifier for the [`Engine`](crate::engine::Engine) a [`MetaPortfolio`] is associated
@@ -61,7 +61,7 @@ pub struct MetaPortfolio<Repository, Allocator, RiskManager, Statistic>
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
     Allocator: OrderAllocator<Repository>,
-    RiskManager: OrderEvaluator,
+    RiskManager: OrderEvaluator<Repository>,
     Statistic: Initialiser + PositionSummariser,
 {
     /// Identifier for the [`Engine`](crate::engine::Engine) this Portfolio is associated with (1-to-1 relationship).
@@ -81,7 +81,7 @@ impl<Repository, Allocator, RiskManager, Statistic> MarketUpdater
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
     Allocator: OrderAllocator<Repository>,
-    RiskManager: OrderEvaluator,
+    RiskManager: OrderEvaluator<Repository>,
     Statistic: Initialiser + PositionSummariser,
 {
     fn update_from_market(
@@ -114,7 +114,7 @@ impl<Repository, Allocator, RiskManager, Statistic> OrderGenerator
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
     Allocator: OrderAllocator<Repository>,
-    RiskManager: OrderEvaluator,
+    RiskManager: OrderEvaluator<Repository>,
     Statistic: Initialiser + PositionSummariser,
 {
     fn generate_order(
@@ -164,7 +164,7 @@ where
                         positions.iter(),
                         *signal_strength,
                     );
-                    self.risk_manager.evaluate_order(order)
+                    self.risk_manager.evaluate_order(&self.repository, order)
                 })
                 .flatten(),
         ));
@@ -213,7 +213,7 @@ impl<Repository, Allocator, RiskManager, Statistic> FillUpdater
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
     Allocator: OrderAllocator<Repository>,
-    RiskManager: OrderEvaluator,
+    RiskManager: OrderEvaluator<Repository>,
     Statistic: Initialiser + PositionSummariser + Serialize,
 {
     fn update_from_fill(&mut self, fill: &FillEvent) -> Result<Vec<Event>, PortfolioError> {
@@ -298,7 +298,7 @@ impl<Repository, Allocator, RiskManager, Statistic> PositionHandler
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
     Allocator: OrderAllocator<Repository>,
-    RiskManager: OrderEvaluator,
+    RiskManager: OrderEvaluator<Repository>,
     Statistic: Initialiser + PositionSummariser,
 {
     fn set_open_position(&mut self, position: Position) -> Result<(), RepositoryError> {
@@ -343,7 +343,7 @@ impl<Repository, Allocator, RiskManager, Statistic> StatisticHandler<Statistic>
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
     Allocator: OrderAllocator<Repository>,
-    RiskManager: OrderEvaluator,
+    RiskManager: OrderEvaluator<Repository>,
     Statistic: Initialiser + PositionSummariser,
 {
     fn set_statistics(
@@ -364,7 +364,7 @@ impl<Repository, Allocator, RiskManager, Statistic>
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
     Allocator: OrderAllocator<Repository>,
-    RiskManager: OrderEvaluator,
+    RiskManager: OrderEvaluator<Repository>,
     Statistic: Initialiser + PositionSummariser,
 {
     /// Constructs a new [`MetaPortfolio`] using the provided [`PortfolioLego`] components, and
@@ -436,7 +436,7 @@ pub struct MetaPortfolioBuilder<Repository, Allocator, RiskManager, Statistic>
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
     Allocator: OrderAllocator<Repository>,
-    RiskManager: OrderEvaluator,
+    RiskManager: OrderEvaluator<Repository>,
     Statistic: Initialiser + PositionSummariser,
 {
     engine_id: Option<Uuid>,
@@ -454,7 +454,7 @@ impl<Repository, Allocator, RiskManager, Statistic>
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
     Allocator: OrderAllocator<Repository>,
-    RiskManager: OrderEvaluator,
+    RiskManager: OrderEvaluator<Repository>,
     Statistic: Initialiser + PositionSummariser,
 {
     pub fn new() -> Self {
