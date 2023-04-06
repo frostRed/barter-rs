@@ -1,18 +1,25 @@
 use crate::{
-    portfolio::{position::Position, OrderEvent},
+    portfolio::{
+        position::Position,
+        repository::{BalanceHandler, PositionHandler},
+        OrderEvent,
+    },
     strategy::{Decision, SignalStrength},
 };
 use serde::{Deserialize, Serialize};
 
 /// Allocates an appropriate [`OrderEvent`] quantity.
-pub trait OrderAllocator {
+pub trait OrderAllocator<Repository>
+where
+    Repository: PositionHandler + BalanceHandler,
+{
     /// Returns an [`OrderEvent`] with a calculated order quantity based on the input order,
     /// [`SignalStrength`] and potential all existing [`Position`]s.
     fn allocate_order<'a, Positions: Iterator<Item = &'a Position>>(
         &self,
+        repository: &Repository,
         order: &mut OrderEvent,
         instrument_positions: Positions,
-
         signal_strength: SignalStrength,
     );
 }
@@ -24,9 +31,13 @@ pub struct DefaultAllocator {
     pub default_order_value: f64,
 }
 
-impl OrderAllocator for DefaultAllocator {
+impl<Repository> OrderAllocator<Repository> for DefaultAllocator
+where
+    Repository: PositionHandler + BalanceHandler,
+{
     fn allocate_order<'a, Positions: Iterator<Item = &'a Position>>(
         &self,
+        _repository: &Repository,
         order: &mut OrderEvent,
         instrument_positions: Positions,
         signal_strength: SignalStrength,
@@ -57,7 +68,13 @@ impl OrderAllocator for DefaultAllocator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::portfolio::repository::in_memory::InMemoryRepository;
+    use crate::statistic::summary::trading::TradingSummary;
     use crate::test_util::{order_event, position};
+
+    fn repository() -> InMemoryRepository<TradingSummary> {
+        InMemoryRepository::new()
+    }
 
     #[test]
     fn should_allocate_order_to_exit_open_long_position() {
@@ -74,6 +91,7 @@ mod tests {
         let input_signal_strength = SignalStrength::new_with_strength(0.0);
 
         allocator.allocate_order(
+            &repository(),
             &mut input_order,
             vec![input_position.clone()].iter(),
             input_signal_strength,
@@ -100,6 +118,7 @@ mod tests {
         let input_signal_strength = SignalStrength::new_with_strength(0.0);
 
         allocator.allocate_order(
+            &repository(),
             &mut input_order,
             vec![input_position.clone()].iter(),
             input_signal_strength,
@@ -125,7 +144,12 @@ mod tests {
 
         let input_signal_strength = SignalStrength::new_with_strength(1.0);
 
-        allocator.allocate_order(&mut input_order, vec![].iter(), input_signal_strength);
+        allocator.allocate_order(
+            &repository(),
+            &mut input_order,
+            vec![].iter(),
+            input_signal_strength,
+        );
 
         let actual_result = input_order.quantity;
         let expected_result =
@@ -148,7 +172,12 @@ mod tests {
 
         let input_signal_strength = SignalStrength::new_with_strength(1.0);
 
-        allocator.allocate_order(&mut input_order, vec![].iter(), input_signal_strength);
+        allocator.allocate_order(
+            &repository(),
+            &mut input_order,
+            vec![].iter(),
+            input_signal_strength,
+        );
 
         let actual_result = input_order.quantity;
         let expected_order_size = ((default_order_value / order_close) * 10000.0).floor() / 10000.0;
@@ -172,7 +201,12 @@ mod tests {
 
         let input_signal_strength = SignalStrength::new_with_strength(1.0);
 
-        allocator.allocate_order(&mut input_order, vec![].iter(), input_signal_strength);
+        allocator.allocate_order(
+            &repository(),
+            &mut input_order,
+            vec![].iter(),
+            input_signal_strength,
+        );
 
         let actual_result = input_order.quantity;
         let expected_result =
@@ -195,7 +229,12 @@ mod tests {
 
         let input_signal_strength = SignalStrength::new_with_strength(1.0);
 
-        allocator.allocate_order(&mut input_order, vec![].iter(), input_signal_strength);
+        allocator.allocate_order(
+            &repository(),
+            &mut input_order,
+            vec![].iter(),
+            input_signal_strength,
+        );
 
         let actual_result = input_order.quantity;
         let expected_order_size = ((default_order_value / order_close) * 10000.0).floor() / 10000.0;

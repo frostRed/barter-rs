@@ -30,7 +30,7 @@ use uuid::Uuid;
 pub struct PortfolioLego<Repository, Allocator, RiskManager, Statistic>
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
-    Allocator: OrderAllocator,
+    Allocator: OrderAllocator<Repository>,
     RiskManager: OrderEvaluator,
     Statistic: Initialiser + PositionSummariser,
 {
@@ -60,7 +60,7 @@ where
 pub struct MetaPortfolio<Repository, Allocator, RiskManager, Statistic>
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
-    Allocator: OrderAllocator,
+    Allocator: OrderAllocator<Repository>,
     RiskManager: OrderEvaluator,
     Statistic: Initialiser + PositionSummariser,
 {
@@ -80,7 +80,7 @@ impl<Repository, Allocator, RiskManager, Statistic> MarketUpdater
     for MetaPortfolio<Repository, Allocator, RiskManager, Statistic>
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
-    Allocator: OrderAllocator,
+    Allocator: OrderAllocator<Repository>,
     RiskManager: OrderEvaluator,
     Statistic: Initialiser + PositionSummariser,
 {
@@ -113,7 +113,7 @@ impl<Repository, Allocator, RiskManager, Statistic> OrderGenerator
     for MetaPortfolio<Repository, Allocator, RiskManager, Statistic>
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
-    Allocator: OrderAllocator,
+    Allocator: OrderAllocator<Repository>,
     RiskManager: OrderEvaluator,
     Statistic: Initialiser + PositionSummariser,
 {
@@ -159,6 +159,7 @@ where
 
                     // Manage OrderEvent size allocation
                     self.allocation_manager.allocate_order(
+                        &self.repository,
                         &mut order,
                         positions.iter(),
                         *signal_strength,
@@ -211,7 +212,7 @@ impl<Repository, Allocator, RiskManager, Statistic> FillUpdater
     for MetaPortfolio<Repository, Allocator, RiskManager, Statistic>
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
-    Allocator: OrderAllocator,
+    Allocator: OrderAllocator<Repository>,
     RiskManager: OrderEvaluator,
     Statistic: Initialiser + PositionSummariser + Serialize,
 {
@@ -296,7 +297,7 @@ impl<Repository, Allocator, RiskManager, Statistic> PositionHandler
     for MetaPortfolio<Repository, Allocator, RiskManager, Statistic>
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
-    Allocator: OrderAllocator,
+    Allocator: OrderAllocator<Repository>,
     RiskManager: OrderEvaluator,
     Statistic: Initialiser + PositionSummariser,
 {
@@ -341,7 +342,7 @@ impl<Repository, Allocator, RiskManager, Statistic> StatisticHandler<Statistic>
     for MetaPortfolio<Repository, Allocator, RiskManager, Statistic>
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
-    Allocator: OrderAllocator,
+    Allocator: OrderAllocator<Repository>,
     RiskManager: OrderEvaluator,
     Statistic: Initialiser + PositionSummariser,
 {
@@ -362,7 +363,7 @@ impl<Repository, Allocator, RiskManager, Statistic>
     MetaPortfolio<Repository, Allocator, RiskManager, Statistic>
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
-    Allocator: OrderAllocator,
+    Allocator: OrderAllocator<Repository>,
     RiskManager: OrderEvaluator,
     Statistic: Initialiser + PositionSummariser,
 {
@@ -434,7 +435,7 @@ where
 pub struct MetaPortfolioBuilder<Repository, Allocator, RiskManager, Statistic>
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
-    Allocator: OrderAllocator,
+    Allocator: OrderAllocator<Repository>,
     RiskManager: OrderEvaluator,
     Statistic: Initialiser + PositionSummariser,
 {
@@ -452,7 +453,7 @@ impl<Repository, Allocator, RiskManager, Statistic>
     MetaPortfolioBuilder<Repository, Allocator, RiskManager, Statistic>
 where
     Repository: PositionHandler + BalanceHandler + StatisticHandler<Statistic>,
-    Allocator: OrderAllocator,
+    Allocator: OrderAllocator<Repository>,
     RiskManager: OrderEvaluator,
     Statistic: Initialiser + PositionSummariser,
 {
