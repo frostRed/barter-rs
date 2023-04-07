@@ -169,7 +169,7 @@ where
                             self.event_q.push_back(Event::Signal(signal));
                         }
 
-                        if let Some(position_update) = self
+                        for position_update in self
                             .portfolio
                             .lock()
                             .update_from_market(&market)

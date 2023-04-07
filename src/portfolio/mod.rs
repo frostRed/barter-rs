@@ -40,7 +40,7 @@ pub trait MarketUpdater {
     fn update_from_market(
         &mut self,
         market: &MarketEvent<DataKind>,
-    ) -> Result<Option<PositionUpdate>, PortfolioError>;
+    ) -> Result<Vec<PositionUpdate>, PortfolioError>;
 }
 
 /// May generate an [`OrderEvent`] from an input advisory [`Signal`].

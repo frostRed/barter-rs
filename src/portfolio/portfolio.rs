@@ -88,25 +88,26 @@ where
     fn update_from_market(
         &mut self,
         market: &MarketEvent<DataKind>,
-    ) -> Result<Option<PositionUpdate>, PortfolioError> {
+    ) -> Result<Vec<PositionUpdate>, PortfolioError> {
         // Determine the instrument_id associated to the input MarketEvent
         let instrument_id =
             determine_instrument_id(self.engine_id, &market.exchange, &market.instrument);
 
         // Update every Position if Portfolio has an open Position for that Symbol-Exchange combination
-        for mut position in self
+        let positions = self
             .repository
-            .get_open_instrument_positions(&instrument_id)?
-        {
+            .get_open_instrument_positions(&instrument_id)?;
+        let mut positions_update = Vec::with_capacity(positions.len());
+        for mut position in positions {
             // Derive PositionUpdate event that communicates the open Position's change in state
             if let Some(position_update) = position.update(market) {
                 // Save updated open Position in the repository
                 self.repository.set_open_position(position)?;
-                return Ok(Some(position_update));
+                positions_update.push(position_update);
             }
         }
 
-        Ok(None)
+        Ok(positions_update)
     }
 }
 
@@ -810,10 +811,8 @@ pub mod tests {
             _ => todo!(),
         };
 
-        let result_pos_update = portfolio
-            .update_from_market(&input_market)
-            .unwrap()
-            .unwrap();
+        let positions_update = portfolio.update_from_market(&input_market).unwrap();
+        let result_pos_update = positions_update.first().unwrap();
         let updated_position = portfolio.repository.position.unwrap();
 
         assert_eq!(updated_position.current_symbol_price.unwrap(), 200.0);
@@ -858,10 +857,8 @@ pub mod tests {
             _ => todo!(),
         };
 
-        let result_pos_update = portfolio
-            .update_from_market(&input_market)
-            .unwrap()
-            .unwrap();
+        let positions_update = portfolio.update_from_market(&input_market).unwrap();
+        let result_pos_update = positions_update.first().unwrap();
         let updated_position = portfolio.repository.position.unwrap();
 
         assert_eq!(updated_position.current_symbol_price.unwrap(), 50.0);
@@ -903,10 +900,8 @@ pub mod tests {
             _ => todo!(),
         };
 
-        let result_pos_update = portfolio
-            .update_from_market(&input_market)
-            .unwrap()
-            .unwrap();
+        let positions_update = portfolio.update_from_market(&input_market).unwrap();
+        let result_pos_update = positions_update.first().unwrap();
         let updated_position = portfolio.repository.position.unwrap();
 
         assert_eq!(updated_position.current_symbol_price.unwrap(), 50.0);
@@ -948,10 +943,8 @@ pub mod tests {
             _ => todo!(),
         };
 
-        let result_pos_update = portfolio
-            .update_from_market(&input_market)
-            .unwrap()
-            .unwrap();
+        let positions_update = portfolio.update_from_market(&input_market).unwrap();
+        let result_pos_update = positions_update.first().unwrap();
         let updated_position = portfolio.repository.position.unwrap();
 
         assert_eq!(updated_position.current_symbol_price.unwrap(), 200.0);
