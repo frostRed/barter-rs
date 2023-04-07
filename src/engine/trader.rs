@@ -186,10 +186,10 @@ where
                             .generate_order(&signal)
                             .expect("failed to generate order");
                         if let Some(close_signal) = close_signal {
-                            if let Some(order) = self
+                            for order in self
                                 .portfolio
                                 .lock()
-                                .generate_exit_order(close_signal)
+                                .generate_exit_instrument_order(close_signal)
                                 .expect("failed to generate forced exit order")
                             {
                                 self.event_tx.send(Event::OrderNew(order.clone()));
@@ -203,10 +203,10 @@ where
                     }
 
                     Event::SignalForceExit(signal_force_exit) => {
-                        if let Some(order) = self
+                        for order in self
                             .portfolio
                             .lock()
-                            .generate_exit_order(signal_force_exit)
+                            .generate_exit_instrument_order(signal_force_exit)
                             .expect("failed to generate forced exit order")
                         {
                             self.event_tx.send(Event::OrderNew(order.clone()));

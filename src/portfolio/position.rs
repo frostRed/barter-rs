@@ -532,6 +532,8 @@ impl Default for PositionMeta {
 pub struct PositionUpdate {
     /// Instrument identifier for a [`Position`], generated from an exchange, symbol, and enter_time.
     pub instrument_id: String,
+    /// Signal identifier for a [`Position`] which created from
+    pub signal_id: Uuid,
     /// Event timestamp of the last event to trigger a [`Position`] update.
     pub update_time: DateTime<Utc>,
     /// Symbol current close price.
@@ -546,6 +548,7 @@ impl From<&mut Position> for PositionUpdate {
     fn from(updated_position: &mut Position) -> Self {
         Self {
             instrument_id: updated_position.instrument_id.clone(),
+            signal_id: updated_position.signal_id,
             update_time: updated_position.meta.update_time,
             current_symbol_price: updated_position.current_symbol_price,
             current_value_gross: updated_position.current_value_gross,

@@ -53,10 +53,10 @@ pub trait OrderGenerator {
 
     /// Generates an exit [`OrderEvent`] if there is an open [`Position`](position::Position)
     /// associated with the input [`SignalForceExit`]'s [`PositionId`](position::InstrumentId).
-    fn generate_exit_order(
+    fn generate_exit_instrument_order(
         &mut self,
         signal: SignalForceExit,
-    ) -> Result<Option<OrderEvent>, PortfolioError>;
+    ) -> Result<Vec<OrderEvent>, PortfolioError>;
 }
 
 /// Updates the Portfolio from an input [`FillEvent`].

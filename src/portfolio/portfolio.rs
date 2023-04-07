@@ -170,10 +170,10 @@ where
         ))
     }
 
-    fn generate_exit_order(
+    fn generate_exit_instrument_order(
         &mut self,
         signal: SignalForceExit,
-    ) -> Result<Option<OrderEvent>, PortfolioError> {
+    ) -> Result<Vec<OrderEvent>, PortfolioError> {
         // Determine PositionId associated with the SignalForceExit
         let instrument_id =
             determine_instrument_id(self.engine_id, &signal.exchange, &signal.instrument);
@@ -188,23 +188,24 @@ where
                 outcome = "no forced exit OrderEvent generated",
                 "cannot generate forced exit OrderEvent for a Position that isn't open"
             );
-            return Ok(None);
+            return Ok(vec![]);
         };
-        let position = positions.first().unwrap();
-
-        Ok(Some(OrderEvent {
-            signal_id: signal.signal_id.unwrap_or(Uuid::new_v4()),
-            time: Utc::now(),
-            exchange: signal.exchange,
-            instrument: signal.instrument,
-            market_meta: MarketMeta {
-                close: position.current_symbol_price,
-                time: position.meta.update_time,
-            },
-            decision: position.determine_exit_decision(),
-            quantity: 0.0 - position.quantity,
-            order_type: OrderType::Market,
-        }))
+        Ok(positions
+            .into_iter()
+            .map(|position| OrderEvent {
+                signal_id: signal.signal_id.unwrap_or(Uuid::new_v4()),
+                time: Utc::now(),
+                exchange: signal.exchange.clone(),
+                instrument: signal.instrument.clone(),
+                market_meta: MarketMeta {
+                    close: position.current_symbol_price,
+                    time: position.meta.update_time,
+                },
+                decision: position.determine_exit_decision(),
+                quantity: 0.0 - position.quantity,
+                order_type: OrderType::Market,
+            })
+            .collect())
     }
 }
 
@@ -1125,11 +1126,11 @@ pub mod tests {
         // Input SignalEvent
         let input_signal = new_signal_force_exit();
 
-        // Expect Ok(Some(OrderEvent))
-        let actual = portfolio
-            .generate_exit_order(input_signal)
-            .unwrap()
+        // Expect Ok(Vec<OrderEvent>) with len 1
+        let orders = portfolio
+            .generate_exit_instrument_order(input_signal)
             .unwrap();
+        let actual = orders.first().unwrap();
 
         assert_eq!(actual.decision, Decision::CloseLong);
         assert_eq!(actual.quantity, -100.0);
@@ -1153,11 +1154,11 @@ pub mod tests {
         // Input SignalEvent
         let input_signal = new_signal_force_exit();
 
-        // Expect Ok(Some(OrderEvent))
-        let actual = portfolio
-            .generate_exit_order(input_signal)
-            .unwrap()
+        // Expect Ok(Vec<OrderEvent>) with len 1
+        let orders = portfolio
+            .generate_exit_instrument_order(input_signal)
             .unwrap();
+        let actual = orders.first().unwrap();
 
         assert_eq!(actual.decision, Decision::CloseShort);
         assert_eq!(actual.quantity, 100.0);
@@ -1175,8 +1176,10 @@ pub mod tests {
         // Input SignalEvent
         let input_signal = new_signal_force_exit();
 
-        let actual = portfolio.generate_exit_order(input_signal).unwrap();
-        assert!(actual.is_none());
+        let actual = portfolio
+            .generate_exit_instrument_order(input_signal)
+            .unwrap();
+        assert!(actual.is_empty());
     }
 
     #[test]

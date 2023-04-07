@@ -125,7 +125,7 @@
 //!         portfolio.generate_order(&signal);
 //!     }
 //!     Event::SignalForceExit(signal) => {
-//!         portfolio.generate_exit_order(signal);
+//!         portfolio.generate_exit_instrument_order(signal);
 //!     }
 //!     Event::Fill(fill) => {
 //!         portfolio.update_from_fill(&fill);
