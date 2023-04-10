@@ -236,7 +236,9 @@ where
 
         match fill.decision {
             Decision::CloseLong | Decision::CloseShort => {
-                let positions = self.repository.remove_positions(&instrument_id)?;
+                let positions = self
+                    .repository
+                    .remove_instrument_positions(&instrument_id)?;
                 if positions.is_empty() {
                     unreachable!("close a not exist position")
                 } else {
@@ -331,11 +333,27 @@ where
         self.repository.get_all_open_positions()
     }
 
-    fn remove_positions(
+    fn get_open_position(
+        &self,
+        instrument_id: &InstrumentId,
+        signal_id: &Uuid,
+    ) -> Result<Option<Position>, RepositoryError> {
+        self.repository.get_open_position(instrument_id, signal_id)
+    }
+
+    fn remove_position(
+        &mut self,
+        instrument_id: &InstrumentId,
+        signal_id: &Uuid,
+    ) -> Result<Option<Position>, RepositoryError> {
+        self.repository.remove_position(instrument_id, signal_id)
+    }
+
+    fn remove_instrument_positions(
         &mut self,
         instrument_id: &InstrumentId,
     ) -> Result<Vec<Position>, RepositoryError> {
-        self.repository.remove_positions(instrument_id)
+        self.repository.remove_instrument_positions(instrument_id)
     }
 
     fn set_exited_position(&mut self, _: Uuid, position: Position) -> Result<(), RepositoryError> {
@@ -627,13 +645,26 @@ pub mod tests {
     #[derive(Default)]
     struct MockRepository<Statistic> {
         set_open_position: Option<fn(position: Position) -> Result<(), RepositoryError>>,
-        get_open_position:
+        get_open_instrument_positions:
             Option<fn(instrument_id: &String) -> Result<Vec<Position>, RepositoryError>>,
-        get_open_positions: Option<
+        get_open_markets_positions: Option<
             fn(engine_id: Uuid, markets: Vec<&Market>) -> Result<Vec<Position>, RepositoryError>,
         >,
         get_all_open_positions: Option<fn() -> Result<Vec<Position>, RepositoryError>>,
-        remove_position: Option<fn(engine_id: &String) -> Result<Vec<Position>, RepositoryError>>,
+        get_open_position: Option<
+            fn(
+                instrument_id: &String,
+                signal_id: &Uuid,
+            ) -> Result<Option<Position>, RepositoryError>,
+        >,
+        remove_position: Option<
+            fn(
+                instrument_id: &InstrumentId,
+                signal_id: &Uuid,
+            ) -> Result<Option<Position>, RepositoryError>,
+        >,
+        remove_instrument_positions:
+            Option<fn(instrument_id: &InstrumentId) -> Result<Vec<Position>, RepositoryError>>,
         set_exited_position:
             Option<fn(engine_id: Uuid, position: Position) -> Result<(), RepositoryError>>,
         get_exited_positions: Option<fn(engine_id: Uuid) -> Result<Vec<Position>, RepositoryError>>,
@@ -669,7 +700,7 @@ pub mod tests {
             &self,
             instrument_id: &String,
         ) -> Result<Vec<Position>, RepositoryError> {
-            self.get_open_position.unwrap()(instrument_id)
+            self.get_open_instrument_positions.unwrap()(instrument_id)
         }
 
         fn get_open_markets_positions<'a, Markets: Iterator<Item = &'a Market>>(
@@ -677,18 +708,34 @@ pub mod tests {
             engine_id: Uuid,
             markets: Markets,
         ) -> Result<Vec<Position>, RepositoryError> {
-            self.get_open_positions.unwrap()(engine_id, markets.into_iter().collect())
+            self.get_open_markets_positions.unwrap()(engine_id, markets.into_iter().collect())
         }
 
         fn get_all_open_positions(&self) -> Result<Vec<Position>, RepositoryError> {
             self.get_all_open_positions.unwrap()()
         }
 
-        fn remove_positions(
+        fn get_open_position(
+            &self,
+            instrument_id: &String,
+            signal_id: &Uuid,
+        ) -> Result<Option<Position>, RepositoryError> {
+            self.get_open_position.unwrap()(instrument_id, signal_id)
+        }
+
+        fn remove_position(
+            &mut self,
+            instrument_id: &InstrumentId,
+            signal_id: &Uuid,
+        ) -> Result<Option<Position>, RepositoryError> {
+            self.remove_position.unwrap()(instrument_id, signal_id)
+        }
+
+        fn remove_instrument_positions(
             &mut self,
             instrument_id: &String,
         ) -> Result<Vec<Position>, RepositoryError> {
-            self.remove_position.unwrap()(instrument_id)
+            self.remove_instrument_positions.unwrap()(instrument_id)
         }
 
         fn set_exited_position(
@@ -791,7 +838,7 @@ pub mod tests {
     fn update_from_market_with_long_position_increasing_in_value() {
         // Build Portfolio
         let mut mock_repository = MockRepository::<PnLReturnSummary>::default();
-        mock_repository.get_open_position = Some(|_| {
+        mock_repository.get_open_instrument_positions = Some(|_| {
             Ok(vec![{
                 let mut input_position = position();
                 input_position.side = Side::Buy;
@@ -838,7 +885,7 @@ pub mod tests {
     fn update_from_market_with_long_position_decreasing_in_value() {
         // Build Portfolio
         let mut mock_repository = MockRepository::<PnLReturnSummary>::default();
-        mock_repository.get_open_position = Some(|_| {
+        mock_repository.get_open_instrument_positions = Some(|_| {
             Ok(vec![{
                 let mut input_position = position();
                 input_position.side = Side::Buy;
@@ -880,7 +927,7 @@ pub mod tests {
     fn update_from_market_with_short_position_increasing_in_value() {
         // Build Portfolio
         let mut mock_repository = MockRepository::<PnLReturnSummary>::default();
-        mock_repository.get_open_position = Some(|_| {
+        mock_repository.get_open_instrument_positions = Some(|_| {
             Ok(vec![{
                 let mut input_position = position();
                 input_position.side = Side::Sell;
@@ -923,7 +970,7 @@ pub mod tests {
     fn update_from_market_with_short_position_decreasing_in_value() {
         // Build Portfolio
         let mut mock_repository = MockRepository::<PnLReturnSummary>::default();
-        mock_repository.get_open_position = Some(|_| {
+        mock_repository.get_open_instrument_positions = Some(|_| {
             Ok(vec![{
                 let mut input_position = position();
                 input_position.side = Side::Sell;
@@ -969,7 +1016,7 @@ pub mod tests {
     fn generate_no_order_with_no_position_and_no_cash() {
         // Build Portfolio
         let mut mock_repository = MockRepository::<PnLReturnSummary>::default();
-        mock_repository.get_open_position = Some(|_| Ok(vec![]));
+        mock_repository.get_open_instrument_positions = Some(|_| Ok(vec![]));
         mock_repository.get_balance = Some(|_| {
             Ok(Balance {
                 time: Utc::now(),
@@ -991,7 +1038,7 @@ pub mod tests {
     fn generate_no_order_with_position_and_no_cash() {
         // Build Portfolio
         let mut mock_repository = MockRepository::<PnLReturnSummary>::default();
-        mock_repository.get_open_position = Some(|_| Ok(vec![position()]));
+        mock_repository.get_open_instrument_positions = Some(|_| Ok(vec![position()]));
         mock_repository.get_balance = Some(|_| {
             Ok(Balance {
                 time: Utc::now(),
@@ -1013,7 +1060,7 @@ pub mod tests {
     fn generate_order_long_with_no_position_and_input_net_long_signal() {
         // Build Portfolio
         let mut mock_repository = MockRepository::<PnLReturnSummary>::default();
-        mock_repository.get_open_position = Some(|_| Ok(vec![]));
+        mock_repository.get_open_instrument_positions = Some(|_| Ok(vec![]));
         mock_repository.get_balance = Some(|_| {
             Ok(Balance {
                 time: Utc::now(),
@@ -1036,7 +1083,7 @@ pub mod tests {
     fn generate_order_short_with_no_position_and_input_net_short_signal() {
         // Build Portfolio
         let mut mock_repository = MockRepository::<PnLReturnSummary>::default();
-        mock_repository.get_open_position = Some(|_| Ok(vec![]));
+        mock_repository.get_open_instrument_positions = Some(|_| Ok(vec![]));
         mock_repository.get_balance = Some(|_| {
             Ok(Balance {
                 time: Utc::now(),
@@ -1059,7 +1106,7 @@ pub mod tests {
     fn generate_order_close_long_with_long_position_and_input_net_close_long_signal() {
         // Build Portfolio
         let mut mock_repository = MockRepository::<PnLReturnSummary>::default();
-        mock_repository.get_open_position = Some(|_| {
+        mock_repository.get_open_instrument_positions = Some(|_| {
             Ok(vec![{
                 let mut position = position();
                 position.side = Side::Buy;
@@ -1088,7 +1135,7 @@ pub mod tests {
     fn generate_order_close_short_with_short_position_and_input_net_close_short_signal() {
         // Build Portfolio
         let mut mock_repository = MockRepository::<PnLReturnSummary>::default();
-        mock_repository.get_open_position = Some(|_| {
+        mock_repository.get_open_instrument_positions = Some(|_| {
             Ok(vec![{
                 let mut position = position();
                 position.side = Side::Sell;
@@ -1117,7 +1164,7 @@ pub mod tests {
     fn generate_exit_order_with_long_position_open() {
         // Build Portfolio
         let mut mock_repository = MockRepository::<PnLReturnSummary>::default();
-        mock_repository.get_open_position = Some(|_| {
+        mock_repository.get_open_instrument_positions = Some(|_| {
             Ok(vec![{
                 let mut position = position();
                 position.side = Side::Buy;
@@ -1145,7 +1192,7 @@ pub mod tests {
     fn generate_exit_order_with_short_position_open() {
         // Build Portfolio
         let mut mock_repository = MockRepository::<PnLReturnSummary>::default();
-        mock_repository.get_open_position = Some(|_| {
+        mock_repository.get_open_instrument_positions = Some(|_| {
             Ok(vec![{
                 let mut position = position();
                 position.side = Side::Sell;
@@ -1173,7 +1220,7 @@ pub mod tests {
     fn generate_no_exit_order_when_no_open_position_to_exit() {
         // Build Portfolio
         let mut mock_repository = MockRepository::<PnLReturnSummary>::default();
-        mock_repository.get_open_position = Some(|_| Ok(vec![]));
+        mock_repository.get_open_instrument_positions = Some(|_| Ok(vec![]));
 
         let mut portfolio = new_mocked_portfolio(mock_repository).unwrap();
 
@@ -1197,8 +1244,8 @@ pub mod tests {
                 available: 200.0,
             })
         });
-        mock_repository.get_open_position = Some(|_| Ok(vec![]));
-        mock_repository.remove_position = Some(|_| Ok(vec![]));
+        mock_repository.get_open_instrument_positions = Some(|_| Ok(vec![]));
+        mock_repository.remove_instrument_positions = Some(|_| Ok(vec![]));
         mock_repository.set_open_position = Some(|_| Ok(()));
         mock_repository.set_balance = Some(|_, _| Ok(()));
         let mut portfolio = new_mocked_portfolio(mock_repository).unwrap();
@@ -1237,8 +1284,8 @@ pub mod tests {
                 available: 200.0,
             })
         });
-        mock_repository.get_open_position = Some(|_| Ok(vec![]));
-        mock_repository.remove_position = Some(|_| Ok(vec![]));
+        mock_repository.get_open_instrument_positions = Some(|_| Ok(vec![]));
+        mock_repository.remove_instrument_positions = Some(|_| Ok(vec![]));
         mock_repository.set_open_position = Some(|_| Ok(()));
         mock_repository.set_balance = Some(|_, _| Ok(()));
         let mut portfolio = new_mocked_portfolio(mock_repository).unwrap();
@@ -1277,7 +1324,7 @@ pub mod tests {
                 available: 97.0,
             })
         });
-        mock_repository.remove_position = Some(|_| {
+        mock_repository.remove_instrument_positions = Some(|_| {
             Ok({
                 vec![{
                     let mut input_position = position();
@@ -1330,7 +1377,7 @@ pub mod tests {
                 available: 97.0,
             })
         });
-        mock_repository.remove_position = Some(|_| {
+        mock_repository.remove_instrument_positions = Some(|_| {
             Ok({
                 vec![{
                     let mut input_position = position();
@@ -1383,7 +1430,7 @@ pub mod tests {
                 available: 97.0,
             })
         });
-        mock_repository.remove_position = Some(|_| {
+        mock_repository.remove_instrument_positions = Some(|_| {
             Ok({
                 vec![{
                     let mut input_position = position();
@@ -1436,7 +1483,7 @@ pub mod tests {
                 available: 97.0,
             })
         });
-        mock_repository.remove_position = Some(|_| {
+        mock_repository.remove_instrument_positions = Some(|_| {
             Ok({
                 vec![{
                     let mut input_position = position();

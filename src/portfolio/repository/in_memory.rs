@@ -76,7 +76,33 @@ impl<Statistic: PositionSummariser> PositionHandler for InMemoryRepository<Stati
         Ok(positions)
     }
 
-    fn remove_positions(
+    fn get_open_position(
+        &self,
+        instrument_id: &InstrumentId,
+        signal_id: &Uuid,
+    ) -> Result<Option<Position>, RepositoryError> {
+        Ok(self
+            .open_positions
+            .get(instrument_id)
+            .and_then(|instrument_position| instrument_position.get(signal_id))
+            .cloned())
+    }
+
+    fn remove_position(
+        &mut self,
+        instrument_id: &InstrumentId,
+        signal_id: &Uuid,
+    ) -> Result<Option<Position>, RepositoryError> {
+        let p = self
+            .open_positions
+            .get_mut(instrument_id)
+            .and_then(|instrument_positions| instrument_positions.remove(signal_id))
+            .ok_or(RepositoryError::DeleteError)?;
+
+        Ok(Some(p))
+    }
+
+    fn remove_instrument_positions(
         &mut self,
         instrument_id: &String,
     ) -> Result<Vec<Position>, RepositoryError> {

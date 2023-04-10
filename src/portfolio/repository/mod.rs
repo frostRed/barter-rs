@@ -36,8 +36,22 @@ pub trait PositionHandler {
     /// Get all open [`Position`]s associated with a Portfolio.
     fn get_all_open_positions(&self) -> Result<Vec<Position>, RepositoryError>;
 
+    /// Get an open [`Position`] by the [`InstrumentId`] and signal_id.
+    fn get_open_position(
+        &self,
+        instrument_id: &InstrumentId,
+        signal_id: &Uuid,
+    ) -> Result<Option<Position>, RepositoryError>;
+
+    /// Remove specific [`Position`] by [`InstrumentId`] and signal_id.
+    fn remove_position(
+        &mut self,
+        instrument_id: &InstrumentId,
+        signal_id: &Uuid,
+    ) -> Result<Option<Position>, RepositoryError>;
+
     /// Remove all [`Position`]s at the [`InstrumentId`].
-    fn remove_positions(
+    fn remove_instrument_positions(
         &mut self,
         instrument_id: &InstrumentId,
     ) -> Result<Vec<Position>, RepositoryError>;

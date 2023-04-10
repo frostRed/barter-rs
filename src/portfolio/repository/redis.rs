@@ -105,17 +105,49 @@ where
         Ok(positions)
     }
 
-    fn remove_positions(
+    fn get_open_position(
+        &self,
+        instrument_id: &InstrumentId,
+        signal_id: &Uuid,
+    ) -> Result<Option<Position>, RepositoryError> {
+        let mut conn = self.conn();
+        let key = format!("{}_{}", instrument_id, signal_id);
+        let position_value: String = conn.get(key).map_err(|_| RepositoryError::ReadError)?;
+        let p = serde_json::from_str::<Position>(&position_value)?;
+        Ok(Some(p))
+    }
+
+    fn remove_position(
+        &mut self,
+        instrument_id: &InstrumentId,
+        signal_id: &Uuid,
+    ) -> Result<Option<Position>, RepositoryError> {
+        let mut conn = self.conn();
+        let key = format!("{}_{}", instrument_id, signal_id);
+        let position_value: String = conn.get(&key).map_err(|_| RepositoryError::ReadError)?;
+        let p = serde_json::from_str::<Position>(&position_value)?;
+
+        conn.del(key).map_err(|_| RepositoryError::DeleteError)?;
+
+        Ok(Some(p))
+    }
+
+    fn remove_instrument_positions(
         &mut self,
         instrument_id: &String,
     ) -> Result<Vec<Position>, RepositoryError> {
-        let position = self.get_open_instrument_positions(instrument_id)?;
-
         let mut conn = self.conn();
-        conn.del(instrument_id)
-            .map_err(|_| RepositoryError::DeleteError)?;
-
-        Ok(position)
+        let mut positions = vec![];
+        let keys: Vec<String> = conn
+            .keys(instrument_id)
+            .map_err(|_| RepositoryError::ReadError)?;
+        for key in keys {
+            let position_value: String = conn.get(&key).map_err(|_| RepositoryError::ReadError)?;
+            let p = serde_json::from_str::<Position>(&position_value)?;
+            positions.push(p);
+            conn.del(key).map_err(|_| RepositoryError::DeleteError)?;
+        }
+        Ok(positions)
     }
 
     fn set_exited_position(
