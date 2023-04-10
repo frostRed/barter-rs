@@ -149,12 +149,21 @@ impl SuggestInfo {
     }
 }
 
+/// Exit a specified position. Take Profit and Stop Loss
+#[derive(Clone, Eq, PartialEq, PartialOrd, Debug, Deserialize, Serialize)]
+pub struct SignalPositionExit {
+    pub signal_id: Uuid,
+    pub time: DateTime<Utc>,
+    pub exchange: Exchange,
+    pub instrument: Instrument,
+}
+
 /// use this Signal to Exit all positions of a instrument.
 /// generate by OrderGenerator with a strategy Signal
 #[derive(Clone, Eq, PartialEq, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct SignalInstrumentPositionsExit {
     pub signal_id: Uuid,
-    pub force_exit: SignalForceExit,
+    pub signal_force_exit: SignalForceExit,
 }
 
 impl SignalInstrumentPositionsExit {
@@ -166,7 +175,7 @@ impl SignalInstrumentPositionsExit {
     {
         Self {
             signal_id,
-            force_exit: SignalForceExit::new(exchange, instrument),
+            signal_force_exit: SignalForceExit::new(exchange, instrument),
         }
     }
 }
@@ -175,7 +184,7 @@ impl From<SignalForceExit> for SignalInstrumentPositionsExit {
     fn from(value: SignalForceExit) -> Self {
         Self {
             signal_id: Uuid::new_v4(),
-            force_exit: value,
+            signal_force_exit: value,
         }
     }
 }

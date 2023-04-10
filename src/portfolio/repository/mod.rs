@@ -50,12 +50,6 @@ pub trait PositionHandler {
         signal_id: &Uuid,
     ) -> Result<Option<Position>, RepositoryError>;
 
-    /// Remove all [`Position`]s at the [`InstrumentId`].
-    fn remove_instrument_positions(
-        &mut self,
-        instrument_id: &InstrumentId,
-    ) -> Result<Vec<Position>, RepositoryError>;
-
     /// Append an exited [`Position`] to the Portfolio's exited position list.
     fn set_exited_position(
         &mut self,

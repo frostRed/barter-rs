@@ -170,6 +170,9 @@ async fn listen_to_engine_events(mut event_rx: mpsc::UnboundedReceiver<Event>) {
                 // Signal Event occurred in Engine
                 println!("{signal:?}");
             }
+            Event::SignalPositionExit(_) => {
+                // SignalPositionExit Event occurred in Engine
+            }
             Event::SignalForceExit(_) => {
                 // SignalForceExit Event occurred in Engine
             }

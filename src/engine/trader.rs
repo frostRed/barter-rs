@@ -191,7 +191,7 @@ where
                                 .portfolio
                                 .lock()
                                 .generate_exit_instrument_order(close_signal)
-                                .expect("failed to generate forced exit order")
+                                .expect("failed to generate forced exit orders")
                             {
                                 self.event_tx.send(Event::OrderNew(order.clone()));
                                 self.event_q.push_back(Event::OrderNew(order));
@@ -202,7 +202,29 @@ where
                             self.event_q.push_back(Event::OrderNew(order));
                         }
                     }
+                    Event::SignalPositionExit(signal) => {
+                        if let Some(order) = self
+                            .portfolio
+                            .lock()
+                            .generate_exit_order(signal)
+                            .expect("failed to generate position exit order")
+                        {
+                            self.event_tx.send(Event::OrderNew(order.clone()));
+                            self.event_q.push_back(Event::OrderNew(order));
+                        }
+                    }
 
+                    Event::SignalInstrumentExit(signal) => {
+                        for order in self
+                            .portfolio
+                            .lock()
+                            .generate_exit_instrument_order(signal)
+                            .expect("failed to generate forced exit orders")
+                        {
+                            self.event_tx.send(Event::OrderNew(order.clone()));
+                            self.event_q.push_back(Event::OrderNew(order));
+                        }
+                    }
                     Event::SignalForceExit(signal_force_exit) => {
                         for order in self
                             .portfolio
@@ -210,7 +232,7 @@ where
                             .generate_exit_instrument_order(SignalInstrumentPositionsExit::from(
                                 signal_force_exit,
                             ))
-                            .expect("failed to generate forced exit order")
+                            .expect("failed to generate forced exit orders")
                         {
                             self.event_tx.send(Event::OrderNew(order.clone()));
                             self.event_q.push_back(Event::OrderNew(order));

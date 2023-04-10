@@ -1,3 +1,4 @@
+use crate::strategy::SignalPositionExit;
 use crate::{
     execution::FillEvent,
     portfolio::{
@@ -20,6 +21,7 @@ use tracing::warn;
 pub enum Event {
     Market(MarketEvent<DataKind>),
     Signal(Signal),
+    SignalPositionExit(SignalPositionExit),
     SignalForceExit(SignalForceExit),
     SignalInstrumentExit(SignalInstrumentPositionsExit),
     OrderNew(OrderEvent),

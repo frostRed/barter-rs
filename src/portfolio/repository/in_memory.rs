@@ -102,17 +102,6 @@ impl<Statistic: PositionSummariser> PositionHandler for InMemoryRepository<Stati
         Ok(Some(p))
     }
 
-    fn remove_instrument_positions(
-        &mut self,
-        instrument_id: &String,
-    ) -> Result<Vec<Position>, RepositoryError> {
-        let positions = self
-            .open_positions
-            .remove(instrument_id)
-            .ok_or(RepositoryError::DeleteError)?;
-        Ok(positions.values().map(Position::clone).collect())
-    }
-
     fn set_exited_position(
         &mut self,
         engine_id: Uuid,

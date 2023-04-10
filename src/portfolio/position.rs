@@ -1,3 +1,5 @@
+use crate::data::MarketMeta;
+use crate::portfolio::{OrderEvent, OrderType};
 use crate::{
     execution::{FeeAmount, Fees, FillEvent},
     portfolio::{error::PortfolioError, Balance},
@@ -279,6 +281,28 @@ impl Position {
     /// appropriately calculated.
     pub fn calculate_profit_loss_return(&self) -> f64 {
         self.realised_profit_loss / self.enter_value_gross
+    }
+
+    /// generate a order to exit this position
+    pub fn exit_order(
+        &self,
+        signal_id: Uuid,
+        exchange: Exchange,
+        instrument: Instrument,
+    ) -> OrderEvent {
+        OrderEvent {
+            signal_id,
+            time: Utc::now(),
+            exchange,
+            instrument,
+            market_meta: MarketMeta {
+                close: self.current_symbol_price,
+                time: self.meta.update_time,
+            },
+            decision: self.determine_exit_decision(),
+            quantity: 0.0 - self.quantity,
+            order_type: OrderType::Market,
+        }
     }
 }
 
