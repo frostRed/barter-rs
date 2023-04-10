@@ -149,11 +149,41 @@ impl SuggestInfo {
     }
 }
 
+/// use this Signal to Exit all positions of a instrument.
+/// generate by OrderGenerator with a strategy Signal
+#[derive(Clone, Eq, PartialEq, PartialOrd, Debug, Deserialize, Serialize)]
+pub struct SignalInstrumentPositionsExit {
+    pub signal_id: Uuid,
+    pub force_exit: SignalForceExit,
+}
+
+impl SignalInstrumentPositionsExit {
+    /// Constructs a new [`Self`] using the configuration provided.
+    pub fn new<E, I>(signal_id: Uuid, exchange: E, instrument: I) -> Self
+    where
+        E: Into<Exchange>,
+        I: Into<Instrument>,
+    {
+        Self {
+            signal_id,
+            force_exit: SignalForceExit::new(exchange, instrument),
+        }
+    }
+}
+
+impl From<SignalForceExit> for SignalInstrumentPositionsExit {
+    fn from(value: SignalForceExit) -> Self {
+        Self {
+            signal_id: Uuid::new_v4(),
+            force_exit: value,
+        }
+    }
+}
+
 /// Force exit Signal produced after an [`Engine`](crate::engine::Engine) receives a
 /// [`Command::ExitPosition`](crate::engine::Command) from an external source.
 #[derive(Clone, Eq, PartialEq, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct SignalForceExit {
-    pub signal_id: Option<Uuid>,
     pub time: DateTime<Utc>,
     pub exchange: Exchange,
     pub instrument: Instrument,
@@ -179,7 +209,6 @@ impl SignalForceExit {
         I: Into<Instrument>,
     {
         Self {
-            signal_id: None,
             time: Utc::now(),
             exchange: exchange.into(),
             instrument: instrument.into(),

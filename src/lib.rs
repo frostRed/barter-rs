@@ -97,6 +97,7 @@
 //! use barter_integration::model::{Market, InstrumentKind};
 //! use std::marker::PhantomData;
 //! use uuid::Uuid;
+//! use barter::strategy::SignalInstrumentPositionsExit;
 //!
 //! let components = PortfolioLego {
 //!     engine_id: Uuid::new_v4(),
@@ -125,7 +126,7 @@
 //!         portfolio.generate_order(&signal);
 //!     }
 //!     Event::SignalForceExit(signal) => {
-//!         portfolio.generate_exit_instrument_order(signal);
+//!         portfolio.generate_exit_instrument_order(SignalInstrumentPositionsExit::from(signal));
 //!     }
 //!     Event::Fill(fill) => {
 //!         portfolio.update_from_fill(&fill);

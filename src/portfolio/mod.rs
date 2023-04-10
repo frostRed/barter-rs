@@ -1,9 +1,10 @@
+use crate::strategy::SignalInstrumentPositionsExit;
 use crate::{
     data::MarketMeta,
     event::Event,
     execution::FillEvent,
     portfolio::{error::PortfolioError, position::PositionUpdate},
-    strategy::{Decision, Signal, SignalForceExit},
+    strategy::{Decision, Signal},
 };
 use barter_data::event::{DataKind, MarketEvent};
 use barter_integration::model::{Exchange, Instrument};
@@ -49,13 +50,13 @@ pub trait OrderGenerator {
     fn generate_order(
         &mut self,
         signal: &Signal,
-    ) -> Result<(Option<SignalForceExit>, Option<OrderEvent>), PortfolioError>;
+    ) -> Result<(Option<SignalInstrumentPositionsExit>, Option<OrderEvent>), PortfolioError>;
 
     /// Generates an exit [`OrderEvent`] if there is an open [`Position`](position::Position)
     /// associated with the input [`SignalForceExit`]'s [`PositionId`](position::InstrumentId).
     fn generate_exit_instrument_order(
         &mut self,
-        signal: SignalForceExit,
+        signal: SignalInstrumentPositionsExit,
     ) -> Result<Vec<OrderEvent>, PortfolioError>;
 }
 

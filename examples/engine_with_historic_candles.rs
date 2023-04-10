@@ -146,6 +146,9 @@ async fn listen_to_engine_events(mut event_rx: mpsc::UnboundedReceiver<Event>) {
             Event::SignalForceExit(_) => {
                 // SignalForceExit Event occurred in Engine
             }
+            Event::SignalInstrumentExit(_) => {
+                // SignalInstrumentPositionsExit Event occurred in Engine
+            }
             Event::OrderNew(new_order) => {
                 // OrderNew Event occurred in Engine
                 println!("{new_order:?}");

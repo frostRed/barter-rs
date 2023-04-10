@@ -9,7 +9,7 @@ use super::{
     risk::OrderEvaluator,
     Balance, FillUpdater, MarketUpdater, OrderEvent, OrderGenerator, OrderType,
 };
-use crate::strategy::Suggest;
+use crate::strategy::{SignalInstrumentPositionsExit, Suggest};
 use crate::{
     data::MarketMeta,
     event::Event,
@@ -122,7 +122,7 @@ where
     fn generate_order(
         &mut self,
         signal: &Signal,
-    ) -> Result<(Option<SignalForceExit>, Option<OrderEvent>), PortfolioError> {
+    ) -> Result<(Option<SignalInstrumentPositionsExit>, Option<OrderEvent>), PortfolioError> {
         // Determine the instrument_id & associated Option<Position> related to input SignalEvent
         let instrument_id =
             determine_instrument_id(self.engine_id, &signal.exchange, &signal.instrument);
@@ -138,11 +138,13 @@ where
         // Parse signals from Strategy to determine net signal decision & associated strength
         let (close_signal, open_signal) = parse_signal_suggest(&positions, &signal.suggest);
 
-        let signal_force_exit = close_signal.map(|_| SignalForceExit {
-            signal_id: Some(signal.signal_id),
-            time: signal.time,
-            exchange: signal.exchange.clone(),
-            instrument: signal.instrument.clone(),
+        let signal_force_exit = close_signal.map(|_| SignalInstrumentPositionsExit {
+            signal_id: signal.signal_id,
+            force_exit: SignalForceExit {
+                time: signal.time,
+                exchange: signal.exchange.clone(),
+                instrument: signal.instrument.clone(),
+            },
         });
         Ok((
             signal_force_exit,
@@ -172,11 +174,14 @@ where
 
     fn generate_exit_instrument_order(
         &mut self,
-        signal: SignalForceExit,
+        signal: SignalInstrumentPositionsExit,
     ) -> Result<Vec<OrderEvent>, PortfolioError> {
         // Determine PositionId associated with the SignalForceExit
-        let instrument_id =
-            determine_instrument_id(self.engine_id, &signal.exchange, &signal.instrument);
+        let instrument_id = determine_instrument_id(
+            self.engine_id,
+            &signal.force_exit.exchange,
+            &signal.force_exit.instrument,
+        );
 
         // Retrieve Option<Position> associated with the PositionId
         let positions = self
@@ -193,10 +198,10 @@ where
         Ok(positions
             .into_iter()
             .map(|position| OrderEvent {
-                signal_id: signal.signal_id.unwrap_or(Uuid::new_v4()),
+                signal_id: signal.signal_id,
                 time: Utc::now(),
-                exchange: signal.exchange.clone(),
-                instrument: signal.instrument.clone(),
+                exchange: signal.force_exit.exchange.clone(),
+                instrument: signal.force_exit.instrument.clone(),
                 market_meta: MarketMeta {
                     close: position.current_symbol_price,
                     time: position.meta.update_time,
@@ -776,7 +781,6 @@ pub mod tests {
 
     fn new_signal_force_exit() -> SignalForceExit {
         SignalForceExit {
-            signal_id: None,
             time: Utc::now(),
             exchange: Exchange::from("binance"),
             instrument: Instrument::from(("eth", "usdt", InstrumentKind::Spot)),
@@ -1128,7 +1132,7 @@ pub mod tests {
 
         // Expect Ok(Vec<OrderEvent>) with len 1
         let orders = portfolio
-            .generate_exit_instrument_order(input_signal)
+            .generate_exit_instrument_order(SignalInstrumentPositionsExit::from(input_signal))
             .unwrap();
         let actual = orders.first().unwrap();
 
@@ -1156,7 +1160,7 @@ pub mod tests {
 
         // Expect Ok(Vec<OrderEvent>) with len 1
         let orders = portfolio
-            .generate_exit_instrument_order(input_signal)
+            .generate_exit_instrument_order(SignalInstrumentPositionsExit::from(input_signal))
             .unwrap();
         let actual = orders.first().unwrap();
 
@@ -1177,7 +1181,7 @@ pub mod tests {
         let input_signal = new_signal_force_exit();
 
         let actual = portfolio
-            .generate_exit_instrument_order(input_signal)
+            .generate_exit_instrument_order(SignalInstrumentPositionsExit::from(input_signal))
             .unwrap();
         assert!(actual.is_empty());
     }

@@ -1,4 +1,5 @@
 use super::{error::EngineError, Command};
+use crate::strategy::SignalInstrumentPositionsExit;
 use crate::{
     data::{Feed, MarketGenerator},
     event::{Event, MessageTransmitter},
@@ -206,7 +207,9 @@ where
                         for order in self
                             .portfolio
                             .lock()
-                            .generate_exit_instrument_order(signal_force_exit)
+                            .generate_exit_instrument_order(SignalInstrumentPositionsExit::from(
+                                signal_force_exit,
+                            ))
                             .expect("failed to generate forced exit order")
                         {
                             self.event_tx.send(Event::OrderNew(order.clone()));

@@ -4,7 +4,7 @@ use crate::{
         position::{Position, PositionExit, PositionUpdate},
         Balance, OrderEvent,
     },
-    strategy::{Signal, SignalForceExit},
+    strategy::{Signal, SignalForceExit, SignalInstrumentPositionsExit},
 };
 use barter_data::event::{DataKind, MarketEvent};
 use serde::Serialize;
@@ -21,6 +21,7 @@ pub enum Event {
     Market(MarketEvent<DataKind>),
     Signal(Signal),
     SignalForceExit(SignalForceExit),
+    SignalInstrumentExit(SignalInstrumentPositionsExit),
     OrderNew(OrderEvent),
     OrderUpdate,
     Fill(FillEvent),
