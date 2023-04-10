@@ -236,59 +236,59 @@ where
 
         match fill.decision {
             Decision::CloseLong | Decision::CloseShort => {
-                let positions = self
+                let position = self
                     .repository
-                    .remove_instrument_positions(&instrument_id)?;
-                if positions.is_empty() {
+                    .remove_position(&instrument_id, &fill.signal_id)?;
+                if position.is_none() {
                     unreachable!("close a not exist position")
                 } else {
                     // EXIT SCENARIO - FillEvent for Symbol-Exchange combination with open Position
-                    for mut position in positions {
-                        // Exit Position (in place mutation), & add the PositionExit event to Vec<Event>
-                        let position_exit = position.exit(balance, fill)?;
-                        generated_events.push(Event::PositionExit(position_exit));
+                    let mut position = position.unwrap();
+                    // Exit Position (in place mutation), & add the PositionExit event to Vec<Event>
+                    let position_exit = position.exit(balance, fill)?;
+                    generated_events.push(Event::PositionExit(position_exit));
 
-                        // Update Portfolio balance on Position exit
-                        // '--> available balance adds enter_total_fees since included in result PnL calc
-                        balance.available += position.enter_value_gross
-                            + position.realised_profit_loss
-                            + position.enter_fees_total;
-                        balance.total += position.realised_profit_loss;
+                    // Update Portfolio balance on Position exit
+                    // '--> available balance adds enter_total_fees since included in result PnL calc
+                    balance.available += position.enter_value_gross
+                        + position.realised_profit_loss
+                        + position.enter_fees_total;
+                    balance.total += position.realised_profit_loss;
 
-                        // Update statistics for exited Position market
-                        let market_id = MarketId::new(&fill.exchange, &fill.instrument);
+                    // Update statistics for exited Position market
+                    let market_id = MarketId::new(&fill.exchange, &fill.instrument);
 
-                        let mut stats = self.repository.get_statistics(&market_id)?;
-                        stats.update(&position);
+                    let mut stats = self.repository.get_statistics(&market_id)?;
+                    stats.update(&position);
 
-                        // Persist exited Position & Updated Market statistics in Repository
-                        self.repository.set_statistics(market_id, stats)?;
-                        self.repository
-                            .set_exited_position(self.engine_id, position)?;
-                    }
+                    // Persist exited Position & Updated Market statistics in Repository
+                    self.repository.set_statistics(market_id, stats)?;
+                    self.repository
+                        .set_exited_position(self.engine_id, position)?;
                 }
             }
             // Enter new Position, & add the PositionNew event to Vec<Event>
             Decision::Long | Decision::Short => {
-                let positions = self
+                let existed_positions = self
                     .repository
                     .get_open_instrument_positions(&instrument_id)?;
-                if let Some(position) = positions.first() {
-                    if (position.side == Side::Sell && fill.decision == Decision::Long)
-                        || (position.side == Side::Buy && fill.decision == Decision::Short)
+                if let Some(p) = existed_positions.first() {
+                    if (p.side == Side::Sell && fill.decision == Decision::Long)
+                        || (p.side == Side::Buy && fill.decision == Decision::Short)
                     {
                         return Err(PortfolioError::ExistingOppositePosition);
                     }
                 }
 
-                let position = Position::enter(self.engine_id, fill)?;
-                generated_events.push(Event::PositionNew(position.clone()));
+                let new_position = Position::enter(self.engine_id, fill)?;
+                generated_events.push(Event::PositionNew(new_position.clone()));
 
                 // Update Portfolio Balance.available on Position entry
-                balance.available += -position.enter_value_gross - position.enter_fees_total;
+                balance.available +=
+                    -new_position.enter_value_gross - new_position.enter_fees_total;
 
                 // Add to current Positions in Repository
-                self.repository.set_open_position(position)?;
+                self.repository.set_open_position(new_position)?;
             }
         }
         // Add new Balance event to the Vec<Event>
