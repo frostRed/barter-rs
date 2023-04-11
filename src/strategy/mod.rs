@@ -25,6 +25,13 @@ pub struct Signal {
     pub suggest: Suggest,
     /// Metadata propagated from the [`MarketEvent`] that yielded this [`Signal`].
     pub market_meta: MarketMeta,
+    pub extra: SignalExtra,
+}
+
+#[derive(Clone, Copy, Default, PartialEq, PartialOrd, Debug, Deserialize, Serialize)]
+pub struct SignalExtra {
+    pub take_profit_price: Option<f64>,
+    pub stop_loss_price: Option<f64>,
 }
 
 /// Describes the type of advisory signal the strategy is endorsing.
@@ -150,12 +157,13 @@ impl SuggestInfo {
 }
 
 /// Exit a specified position. Take Profit and Stop Loss
-#[derive(Clone, Eq, PartialEq, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct SignalPositionExit {
     pub signal_id: Uuid,
     pub time: DateTime<Utc>,
     pub exchange: Exchange,
     pub instrument: Instrument,
+    pub signal_extra: SignalExtra,
 }
 
 /// use this Signal to Exit all positions of a instrument.

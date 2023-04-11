@@ -4,7 +4,7 @@ use crate::{
     data::{Feed, MarketGenerator},
     event::{Event, MessageTransmitter},
     execution::ExecutionClient,
-    portfolio::{FillUpdater, MarketUpdater, OrderGenerator},
+    portfolio::{position::PositionUpdateByMarket, FillUpdater, MarketUpdater, OrderGenerator},
     strategy::{SignalForceExit, SignalGenerator},
 };
 use barter_data::event::{DataKind, MarketEvent};
@@ -176,7 +176,11 @@ where
                             .update_from_market(&market)
                             .expect("failed to update Portfolio from market")
                         {
-                            self.event_tx.send(Event::PositionUpdate(position_update));
+                            self.event_tx
+                                .send(Event::PositionUpdate(position_update.clone()));
+                            if let PositionUpdateByMarket::SignalExit(signal) = position_update {
+                                self.event_q.push_back(Event::SignalPositionExit(signal));
+                            }
                         }
                     }
 
@@ -190,7 +194,7 @@ where
                             for order in self
                                 .portfolio
                                 .lock()
-                                .generate_exit_instrument_order(close_signal)
+                                .generate_instrument_exit_order(close_signal)
                                 .expect("failed to generate forced exit orders")
                             {
                                 self.event_tx.send(Event::OrderNew(order.clone()));
@@ -218,7 +222,7 @@ where
                         for order in self
                             .portfolio
                             .lock()
-                            .generate_exit_instrument_order(signal)
+                            .generate_instrument_exit_order(signal)
                             .expect("failed to generate forced exit orders")
                         {
                             self.event_tx.send(Event::OrderNew(order.clone()));
@@ -229,7 +233,7 @@ where
                         for order in self
                             .portfolio
                             .lock()
-                            .generate_exit_instrument_order(SignalInstrumentPositionsExit::from(
+                            .generate_instrument_exit_order(SignalInstrumentPositionsExit::from(
                                 signal_force_exit,
                             ))
                             .expect("failed to generate forced exit orders")

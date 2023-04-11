@@ -126,7 +126,7 @@
 //!         portfolio.generate_order(&signal);
 //!     }
 //!     Event::SignalForceExit(signal) => {
-//!         portfolio.generate_exit_instrument_order(SignalInstrumentPositionsExit::from(signal));
+//!         portfolio.generate_instrument_exit_order(SignalInstrumentPositionsExit::from(signal));
 //!     }
 //!     Event::Fill(fill) => {
 //!         portfolio.update_from_fill(&fill);
@@ -251,7 +251,7 @@ pub mod test_util {
         data::MarketMeta,
         execution::{Fees, FillEvent},
         portfolio::{position::Position, OrderEvent, OrderType},
-        strategy::{Decision, Signal},
+        strategy::{Decision, Signal, SignalExtra},
     };
     use barter_data::{
         event::{DataKind, MarketEvent},
@@ -308,6 +308,7 @@ pub mod test_util {
             instrument: Instrument::from(("btc", "usdt", InstrumentKind::Spot)),
             suggest: Default::default(),
             market_meta: Default::default(),
+            extra: SignalExtra::default(),
         }
     }
 
@@ -322,6 +323,7 @@ pub mod test_util {
             decision: Decision::default(),
             quantity: 1.0,
             order_type: OrderType::default(),
+            signal_extra: SignalExtra::default(),
         }
     }
 
@@ -337,6 +339,7 @@ pub mod test_util {
             quantity: 1.0,
             fill_value_gross: 100.0,
             fees: Fees::default(),
+            signal_extra: SignalExtra::default(),
         }
     }
 
@@ -362,6 +365,7 @@ pub mod test_util {
             current_value_gross: 100.0,
             unrealised_profit_loss: 0.0,
             realised_profit_loss: 0.0,
+            signal_extra: SignalExtra::default(),
         }
     }
 }

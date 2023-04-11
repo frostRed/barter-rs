@@ -3,18 +3,21 @@ use super::{
     error::PortfolioError,
     position::{
         determine_instrument_id, InstrumentId, Position, PositionEnterer, PositionExiter,
-        PositionUpdate, PositionUpdater,
+        PositionUpdater,
     },
     repository::{error::RepositoryError, BalanceHandler, PositionHandler, StatisticHandler},
     risk::OrderEvaluator,
     Balance, FillUpdater, MarketUpdater, OrderEvent, OrderGenerator, OrderType,
 };
-use crate::strategy::{SignalInstrumentPositionsExit, SignalPositionExit, Suggest};
 use crate::{
     event::Event,
     execution::FillEvent,
+    portfolio::position::PositionUpdateByMarket,
     statistic::summary::{Initialiser, PositionSummariser},
-    strategy::{Decision, Signal, SignalForceExit, SuggestInfo},
+    strategy::{
+        Decision, Signal, SignalForceExit, SignalInstrumentPositionsExit, SignalPositionExit,
+        Suggest, SuggestInfo,
+    },
 };
 use barter_data::event::{DataKind, MarketEvent};
 use barter_integration::model::{Market, MarketId, Side};
@@ -87,7 +90,7 @@ where
     fn update_from_market(
         &mut self,
         market: &MarketEvent<DataKind>,
-    ) -> Result<Vec<PositionUpdate>, PortfolioError> {
+    ) -> Result<Vec<PositionUpdateByMarket>, PortfolioError> {
         // Determine the instrument_id associated to the input MarketEvent
         let instrument_id =
             determine_instrument_id(self.engine_id, &market.exchange, &market.instrument);
@@ -100,9 +103,33 @@ where
         for mut position in positions {
             // Derive PositionUpdate event that communicates the open Position's change in state
             if let Some(position_update) = position.update(market) {
+                let signal_extra = position.signal_extra;
+                let position_current_symbol_price = position.current_symbol_price;
+
                 // Save updated open Position in the repository
                 self.repository.set_open_position(position)?;
-                positions_update.push(position_update);
+
+                positions_update.push(PositionUpdateByMarket::Update(position_update));
+
+                if signal_extra
+                    .take_profit_price
+                    .map(|take_profit_price| position_current_symbol_price >= take_profit_price)
+                    .unwrap_or(false)
+                    || signal_extra
+                        .stop_loss_price
+                        .map(|stop_loss_price| position_current_symbol_price >= stop_loss_price)
+                        .unwrap_or(false)
+                {
+                    // generate a signal exit this position
+                    let signal_position_exit = SignalPositionExit {
+                        signal_id: Uuid::new_v4(),
+                        time: Utc::now(),
+                        exchange: market.exchange.clone(),
+                        instrument: market.instrument.clone(),
+                        signal_extra,
+                    };
+                    positions_update.push(PositionUpdateByMarket::SignalExit(signal_position_exit));
+                }
             }
         }
 
@@ -157,6 +184,7 @@ where
                     decision: signal_decision,
                     quantity: 0.0,
                     order_type: OrderType::default(),
+                    signal_extra: signal.extra,
                 };
 
                 // Manage OrderEvent size allocation
@@ -171,7 +199,7 @@ where
         ))
     }
 
-    fn generate_exit_instrument_order(
+    fn generate_instrument_exit_order(
         &mut self,
         signal: SignalInstrumentPositionsExit,
     ) -> Result<Vec<OrderEvent>, PortfolioError> {
@@ -201,6 +229,7 @@ where
                     signal.signal_id,
                     signal.signal_force_exit.exchange.clone(),
                     signal.signal_force_exit.instrument.clone(),
+                    None,
                 )
             })
             .collect())
@@ -231,6 +260,7 @@ where
             signal.signal_id,
             signal.exchange.clone(),
             signal.instrument,
+            Some(signal.signal_extra),
         )))
     }
 }
@@ -651,7 +681,7 @@ pub mod tests {
     use crate::portfolio::repository::error::RepositoryError;
     use crate::portfolio::risk::DefaultRisk;
     use crate::statistic::summary::pnl::PnLReturnSummary;
-    use crate::strategy::SignalForceExit;
+    use crate::strategy::{SignalExtra, SignalForceExit};
     use crate::test_util::{fill_event, market_event_trade, position, signal};
     use barter_integration::model::{Exchange, Instrument, InstrumentKind, Side};
 
@@ -868,21 +898,26 @@ pub mod tests {
         };
 
         let positions_update = portfolio.update_from_market(&input_market).unwrap();
-        let result_pos_update = positions_update.first().unwrap();
-        let updated_position = portfolio.repository.position.unwrap();
+        assert_eq!(positions_update.len(), 1);
+        if let PositionUpdateByMarket::Update(result_pos_update) = positions_update.first().unwrap()
+        {
+            let updated_position = portfolio.repository.position.unwrap();
 
-        assert_eq!(updated_position.current_symbol_price.unwrap(), 200.0);
-        assert_eq!(updated_position.current_value_gross.unwrap(), 200.0);
+            assert_eq!(updated_position.current_symbol_price.unwrap(), 200.0);
+            assert_eq!(updated_position.current_value_gross.unwrap(), 200.0);
 
-        // Unreal PnL Long = current_value_gross - enter_value_gross - enter_fees_total*2
-        assert_eq!(
-            updated_position.unrealised_profit_loss.unwrap(),
-            200.0 - 100.0 - 6.0
-        );
-        assert_eq!(
-            result_pos_update.unrealised_profit_loss,
-            200.0 - 100.0 - 6.0
-        );
+            // Unreal PnL Long = current_value_gross - enter_value_gross - enter_fees_total*2
+            assert_eq!(
+                updated_position.unrealised_profit_loss.unwrap(),
+                200.0 - 100.0 - 6.0
+            );
+            assert_eq!(
+                result_pos_update.unrealised_profit_loss,
+                200.0 - 100.0 - 6.0
+            );
+        } else {
+            assert!(false);
+        }
     }
 
     #[test]
@@ -914,17 +949,23 @@ pub mod tests {
         };
 
         let positions_update = portfolio.update_from_market(&input_market).unwrap();
-        let result_pos_update = positions_update.first().unwrap();
-        let updated_position = portfolio.repository.position.unwrap();
 
-        assert_eq!(updated_position.current_symbol_price.unwrap(), 50.0);
-        assert_eq!(updated_position.current_value_gross.unwrap(), 50.0);
-        // Unreal PnL Long = current_value_gross - enter_value_gross - enter_fees_total*2
-        assert_eq!(
-            updated_position.unrealised_profit_loss.unwrap(),
-            50.0 - 100.0 - 6.0
-        );
-        assert_eq!(result_pos_update.unrealised_profit_loss, 50.0 - 100.0 - 6.0);
+        assert_eq!(positions_update.len(), 1);
+        if let PositionUpdateByMarket::Update(result_pos_update) = positions_update.first().unwrap()
+        {
+            let updated_position = portfolio.repository.position.unwrap();
+
+            assert_eq!(updated_position.current_symbol_price.unwrap(), 50.0);
+            assert_eq!(updated_position.current_value_gross.unwrap(), 50.0);
+            // Unreal PnL Long = current_value_gross - enter_value_gross - enter_fees_total*2
+            assert_eq!(
+                updated_position.unrealised_profit_loss.unwrap(),
+                50.0 - 100.0 - 6.0
+            );
+            assert_eq!(result_pos_update.unrealised_profit_loss, 50.0 - 100.0 - 6.0);
+        } else {
+            assert!(false);
+        }
     }
 
     #[test]
@@ -957,17 +998,22 @@ pub mod tests {
         };
 
         let positions_update = portfolio.update_from_market(&input_market).unwrap();
-        let result_pos_update = positions_update.first().unwrap();
-        let updated_position = portfolio.repository.position.unwrap();
+        assert_eq!(positions_update.len(), 1);
+        if let PositionUpdateByMarket::Update(result_pos_update) = positions_update.first().unwrap()
+        {
+            let updated_position = portfolio.repository.position.unwrap();
 
-        assert_eq!(updated_position.current_symbol_price.unwrap(), 50.0);
-        assert_eq!(updated_position.current_value_gross.unwrap(), 50.0);
-        // Unreal PnL Short = enter_value_gross - current_value_gross - enter_fees_total*2
-        assert_eq!(
-            updated_position.unrealised_profit_loss.unwrap(),
-            100.0 - 50.0 - 6.0
-        );
-        assert_eq!(result_pos_update.unrealised_profit_loss, 100.0 - 50.0 - 6.0);
+            assert_eq!(updated_position.current_symbol_price.unwrap(), 50.0);
+            assert_eq!(updated_position.current_value_gross.unwrap(), 50.0);
+            // Unreal PnL Short = enter_value_gross - current_value_gross - enter_fees_total*2
+            assert_eq!(
+                updated_position.unrealised_profit_loss.unwrap(),
+                100.0 - 50.0 - 6.0
+            );
+            assert_eq!(result_pos_update.unrealised_profit_loss, 100.0 - 50.0 - 6.0);
+        } else {
+            assert!(false);
+        }
     }
 
     #[test]
@@ -1000,20 +1046,143 @@ pub mod tests {
         };
 
         let positions_update = portfolio.update_from_market(&input_market).unwrap();
-        let result_pos_update = positions_update.first().unwrap();
-        let updated_position = portfolio.repository.position.unwrap();
+        assert_eq!(positions_update.len(), 1);
+        if let PositionUpdateByMarket::Update(result_pos_update) = positions_update.first().unwrap()
+        {
+            let updated_position = portfolio.repository.position.unwrap();
 
-        assert_eq!(updated_position.current_symbol_price.unwrap(), 200.0);
-        assert_eq!(updated_position.current_value_gross.unwrap(), 200.0);
-        // Unreal PnL Short = enter_value_gross - current_value_gross - enter_fees_total*2
-        assert_eq!(
-            updated_position.unrealised_profit_loss.unwrap(),
-            100.0 - 200.0 - 6.0
-        );
-        assert_eq!(
-            result_pos_update.unrealised_profit_loss,
-            100.0 - 200.0 - 6.0
-        );
+            assert_eq!(updated_position.current_symbol_price.unwrap(), 200.0);
+            assert_eq!(updated_position.current_value_gross.unwrap(), 200.0);
+            // Unreal PnL Short = enter_value_gross - current_value_gross - enter_fees_total*2
+            assert_eq!(
+                updated_position.unrealised_profit_loss.unwrap(),
+                100.0 - 200.0 - 6.0
+            );
+            assert_eq!(
+                result_pos_update.unrealised_profit_loss,
+                100.0 - 200.0 - 6.0
+            );
+        } else {
+            assert!(false);
+        }
+    }
+
+    #[test]
+    fn update_from_market_with_long_position_take_profit() {
+        // Build Portfolio
+        let mut mock_repository = MockRepository::<PnLReturnSummary>::default();
+        mock_repository.get_open_instrument_positions = Some(|_| {
+            Ok(vec![{
+                let mut input_position = position();
+                input_position.side = Side::Buy;
+                input_position.quantity = 1.0;
+                input_position.enter_fees_total = 3.0;
+                input_position.current_symbol_price = 100.0;
+                input_position.current_value_gross = 100.0;
+                input_position.unrealised_profit_loss = -3.0; // -3.0 from entry fees
+                input_position.signal_extra = SignalExtra {
+                    take_profit_price: Some(200.0),
+                    stop_loss_price: Some(50.0),
+                };
+                input_position
+            }])
+        });
+        mock_repository.set_open_position = Some(|_| Ok(()));
+        let mut portfolio = new_mocked_portfolio(mock_repository).unwrap();
+
+        // Input MarketEvent
+        let mut input_market = market_event_trade(Side::Buy);
+
+        match input_market.kind {
+            // candle.close +100.0 on input_position.current_symbol_price
+            DataKind::Candle(ref mut candle) => candle.close = 200.0,
+            DataKind::Trade(ref mut trade) => trade.price = 200.0,
+            _ => todo!(),
+        };
+
+        let positions_update = portfolio.update_from_market(&input_market).unwrap();
+        assert_eq!(positions_update.len(), 2);
+        if let PositionUpdateByMarket::Update(result_pos_update) = positions_update.first().unwrap()
+        {
+            let updated_position = portfolio.repository.position.unwrap();
+
+            assert_eq!(updated_position.current_symbol_price.unwrap(), 200.0);
+            assert_eq!(updated_position.current_value_gross.unwrap(), 200.0);
+
+            // Unreal PnL Long = current_value_gross - enter_value_gross - enter_fees_total*2
+            assert_eq!(
+                updated_position.unrealised_profit_loss.unwrap(),
+                200.0 - 100.0 - 6.0
+            );
+            assert_eq!(
+                result_pos_update.unrealised_profit_loss,
+                200.0 - 100.0 - 6.0
+            );
+        } else {
+            assert!(false);
+        }
+        if let PositionUpdateByMarket::SignalExit(_signal) = positions_update.get(1).unwrap() {
+            assert!(true);
+        } else {
+            assert!(false);
+        }
+    }
+
+    #[test]
+    fn update_from_market_with_long_position_stop_loss() {
+        // Build Portfolio
+        let mut mock_repository = MockRepository::<PnLReturnSummary>::default();
+        mock_repository.get_open_instrument_positions = Some(|_| {
+            Ok(vec![{
+                let mut input_position = position();
+                input_position.side = Side::Buy;
+                input_position.quantity = 1.0;
+                input_position.enter_fees_total = 3.0;
+                input_position.current_symbol_price = 100.0;
+                input_position.current_value_gross = 100.0;
+                input_position.unrealised_profit_loss = -3.0; // -3.0 from entry fees
+                input_position.signal_extra = SignalExtra {
+                    take_profit_price: Some(200.0),
+                    stop_loss_price: Some(50.0),
+                };
+                input_position
+            }])
+        });
+        mock_repository.set_open_position = Some(|_| Ok(()));
+        let mut portfolio = new_mocked_portfolio(mock_repository).unwrap();
+
+        // Input MarketEvent
+        let mut input_market = market_event_trade(Side::Buy);
+        match input_market.kind {
+            // -50.0 on input_position.current_symbol_price
+            DataKind::Candle(ref mut candle) => candle.close = 50.0,
+            DataKind::Trade(ref mut trade) => trade.price = 50.0,
+            _ => todo!(),
+        };
+
+        let positions_update = portfolio.update_from_market(&input_market).unwrap();
+
+        assert_eq!(positions_update.len(), 2);
+        if let PositionUpdateByMarket::Update(result_pos_update) = positions_update.first().unwrap()
+        {
+            let updated_position = portfolio.repository.position.unwrap();
+
+            assert_eq!(updated_position.current_symbol_price.unwrap(), 50.0);
+            assert_eq!(updated_position.current_value_gross.unwrap(), 50.0);
+            // Unreal PnL Long = current_value_gross - enter_value_gross - enter_fees_total*2
+            assert_eq!(
+                updated_position.unrealised_profit_loss.unwrap(),
+                50.0 - 100.0 - 6.0
+            );
+            assert_eq!(result_pos_update.unrealised_profit_loss, 50.0 - 100.0 - 6.0);
+        } else {
+            assert!(false);
+        }
+        if let PositionUpdateByMarket::SignalExit(_signal) = positions_update.get(1).unwrap() {
+            assert!(true);
+        } else {
+            assert!(false);
+        }
     }
 
     #[test]
@@ -1183,7 +1352,7 @@ pub mod tests {
 
         // Expect Ok(Vec<OrderEvent>) with len 1
         let orders = portfolio
-            .generate_exit_instrument_order(SignalInstrumentPositionsExit::from(input_signal))
+            .generate_instrument_exit_order(SignalInstrumentPositionsExit::from(input_signal))
             .unwrap();
         let actual = orders.first().unwrap();
 
@@ -1211,7 +1380,7 @@ pub mod tests {
 
         // Expect Ok(Vec<OrderEvent>) with len 1
         let orders = portfolio
-            .generate_exit_instrument_order(SignalInstrumentPositionsExit::from(input_signal))
+            .generate_instrument_exit_order(SignalInstrumentPositionsExit::from(input_signal))
             .unwrap();
         let actual = orders.first().unwrap();
 
@@ -1232,7 +1401,7 @@ pub mod tests {
         let input_signal = new_signal_force_exit();
 
         let actual = portfolio
-            .generate_exit_instrument_order(SignalInstrumentPositionsExit::from(input_signal))
+            .generate_instrument_exit_order(SignalInstrumentPositionsExit::from(input_signal))
             .unwrap();
         assert!(actual.is_empty());
     }

@@ -1,3 +1,4 @@
+use crate::strategy::SignalExtra;
 use crate::{data::MarketMeta, portfolio::OrderEvent, strategy::Decision};
 use barter_integration::model::{Exchange, Instrument};
 use chrono::{DateTime, Utc};
@@ -35,6 +36,7 @@ pub struct FillEvent {
     pub fill_value_gross: f64,
     /// All fee types incurred when executing an [`OrderEvent`], and their associated [`FeeAmount`].
     pub fees: Fees,
+    pub signal_extra: SignalExtra,
 }
 
 impl FillEvent {
@@ -79,6 +81,7 @@ pub struct FillEventBuilder {
     pub quantity: Option<f64>,
     pub fill_value_gross: Option<f64>,
     pub fees: Option<Fees>,
+    pub signal_extra: Option<SignalExtra>,
 }
 
 impl FillEventBuilder {
@@ -149,6 +152,13 @@ impl FillEventBuilder {
         }
     }
 
+    pub fn signal_extra(self, value: SignalExtra) -> Self {
+        Self {
+            signal_extra: Some(value),
+            ..self
+        }
+    }
+
     pub fn build(self) -> Result<FillEvent, ExecutionError> {
         Ok(FillEvent {
             signal_id: self
@@ -174,6 +184,9 @@ impl FillEventBuilder {
                 .fill_value_gross
                 .ok_or(ExecutionError::BuilderIncomplete("fill_value_gross"))?,
             fees: self.fees.ok_or(ExecutionError::BuilderIncomplete("fees"))?,
+            signal_extra: self
+                .signal_extra
+                .ok_or(ExecutionError::BuilderIncomplete("signal_extra"))?,
         })
     }
 }

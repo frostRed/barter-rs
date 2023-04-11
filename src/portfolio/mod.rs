@@ -2,8 +2,8 @@ use crate::{
     data::MarketMeta,
     event::Event,
     execution::FillEvent,
-    portfolio::{error::PortfolioError, position::PositionUpdate},
-    strategy::{Decision, Signal, SignalInstrumentPositionsExit, SignalPositionExit},
+    portfolio::{error::PortfolioError, position::PositionUpdateByMarket},
+    strategy::{Decision, Signal, SignalExtra, SignalInstrumentPositionsExit, SignalPositionExit},
 };
 use barter_data::event::{DataKind, MarketEvent};
 use barter_integration::model::{Exchange, Instrument};
@@ -35,12 +35,12 @@ pub mod risk;
 /// Updates the Portfolio from an input [`MarketEvent`].
 pub trait MarketUpdater {
     /// Determines if the Portfolio has an open Position relating to the input [`MarketEvent`]. If
-    /// so it updates it using the market data, and returns a [`PositionUpdate`] detailing the
-    /// changes.
+    /// so it updates it using the market data, it can returns a [`PositionUpdate`] detailing the
+    /// changes or generate a signal to exit this position.
     fn update_from_market(
         &mut self,
         market: &MarketEvent<DataKind>,
-    ) -> Result<Vec<PositionUpdate>, PortfolioError>;
+    ) -> Result<Vec<PositionUpdateByMarket>, PortfolioError>;
 }
 
 /// May generate an [`OrderEvent`] from an input advisory [`Signal`].
@@ -53,7 +53,7 @@ pub trait OrderGenerator {
 
     /// Generates exit [`OrderEvent`]s if there are some open [`Position`](position::Position)s
     /// associated with the input [`SignalInstrumentPositionsExit`]'s [`InstrumentId`](position::InstrumentId).
-    fn generate_exit_instrument_order(
+    fn generate_instrument_exit_order(
         &mut self,
         signal: SignalInstrumentPositionsExit,
     ) -> Result<Vec<OrderEvent>, PortfolioError>;
@@ -89,6 +89,7 @@ pub struct OrderEvent {
     pub quantity: f64,
     /// MARKET, LIMIT etc
     pub order_type: OrderType,
+    pub signal_extra: SignalExtra,
 }
 
 impl OrderEvent {
@@ -126,6 +127,7 @@ pub struct OrderEventBuilder {
     pub decision: Option<Decision>,
     pub quantity: Option<f64>,
     pub order_type: Option<OrderType>,
+    pub signal_extra: Option<SignalExtra>,
 }
 
 impl OrderEventBuilder {
@@ -189,6 +191,13 @@ impl OrderEventBuilder {
         }
     }
 
+    pub fn signal_extra(self, value: SignalExtra) -> Self {
+        Self {
+            signal_extra: Some(value),
+            ..self
+        }
+    }
+
     pub fn build(self) -> Result<OrderEvent, PortfolioError> {
         Ok(OrderEvent {
             signal_id: self
@@ -213,6 +222,9 @@ impl OrderEventBuilder {
             order_type: self
                 .order_type
                 .ok_or(PortfolioError::BuilderIncomplete("order_type"))?,
+            signal_extra: self
+                .signal_extra
+                .ok_or(PortfolioError::BuilderIncomplete("signal_extra"))?,
         })
     }
 }

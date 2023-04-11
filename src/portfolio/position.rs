@@ -3,7 +3,7 @@ use crate::portfolio::{OrderEvent, OrderType};
 use crate::{
     execution::{FeeAmount, Fees, FillEvent},
     portfolio::{error::PortfolioError, Balance},
-    strategy::Decision,
+    strategy::{Decision, SignalExtra, SignalPositionExit},
 };
 use barter_data::event::{DataKind, MarketEvent};
 use barter_integration::model::{Exchange, Instrument, Side};
@@ -124,6 +124,9 @@ pub struct Position {
 
     /// Realised P&L after the [`Position`] has closed.
     pub realised_profit_loss: f64,
+
+    /// Optional take profit and stop loss price by signal.
+    pub signal_extra: SignalExtra,
 }
 
 impl PositionEnterer for Position {
@@ -164,6 +167,7 @@ impl PositionEnterer for Position {
             current_value_gross: fill.fill_value_gross,
             unrealised_profit_loss,
             realised_profit_loss: 0.0,
+            signal_extra: fill.signal_extra,
         })
     }
 }
@@ -289,6 +293,7 @@ impl Position {
         signal_id: Uuid,
         exchange: Exchange,
         instrument: Instrument,
+        signal_extra: Option<SignalExtra>,
     ) -> OrderEvent {
         OrderEvent {
             signal_id,
@@ -302,6 +307,7 @@ impl Position {
             decision: self.determine_exit_decision(),
             quantity: 0.0 - self.quantity,
             order_type: OrderType::Market,
+            signal_extra: signal_extra.unwrap_or(SignalExtra::default()),
         }
     }
 }
@@ -328,6 +334,7 @@ pub struct PositionBuilder {
     pub current_value_gross: Option<f64>,
     pub unrealised_profit_loss: Option<f64>,
     pub realised_profit_loss: Option<f64>,
+    pub signal_extra: Option<SignalExtra>,
 }
 
 impl PositionBuilder {
@@ -468,6 +475,13 @@ impl PositionBuilder {
         }
     }
 
+    pub fn signal_extra(self, value: SignalExtra) -> Self {
+        Self {
+            signal_extra: Some(value),
+            ..self
+        }
+    }
+
     pub fn build(self) -> Result<Position, PortfolioError> {
         Ok(Position {
             instrument_id: self
@@ -523,6 +537,9 @@ impl PositionBuilder {
             realised_profit_loss: self
                 .realised_profit_loss
                 .ok_or(PortfolioError::BuilderIncomplete("realised_profit_loss"))?,
+            signal_extra: self
+                .signal_extra
+                .ok_or(PortfolioError::BuilderIncomplete("signal_extra"))?,
         })
     }
 }
@@ -549,6 +566,12 @@ impl Default for PositionMeta {
             exit_balance: None,
         }
     }
+}
+
+#[derive(Clone, PartialEq, PartialOrd, Debug, Deserialize, Serialize)]
+pub enum PositionUpdateByMarket {
+    Update(PositionUpdate),
+    SignalExit(SignalPositionExit),
 }
 
 /// [`Position`] update event. Occurs as a result of receiving new [`MarketEvent`] data.

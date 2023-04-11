@@ -1,6 +1,6 @@
 use super::{Decision, Signal, SignalGenerator};
 use crate::data::MarketMeta;
-use crate::strategy::Suggest;
+use crate::strategy::{SignalExtra, Suggest};
 use barter_data::event::{DataKind, MarketEvent};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -44,6 +44,7 @@ impl SignalGenerator for RSIStrategy {
                 time: market.exchange_time,
             },
             suggest,
+            extra: SignalExtra::default(),
         })
     }
 }
