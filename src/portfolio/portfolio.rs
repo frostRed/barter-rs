@@ -180,6 +180,7 @@ where
                 // Manage OrderEvent size allocation
                 self.allocation_manager.allocate_order(
                     &self.repository,
+                    self.engine_id,
                     &mut order,
                     positions.iter(),
                     *signal_strength,

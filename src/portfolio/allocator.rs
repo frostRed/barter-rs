@@ -7,6 +7,7 @@ use crate::{
     strategy::{Decision, SuggestInfo},
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 /// Allocates an appropriate [`OrderEvent`] quantity.
 pub trait OrderAllocator<Repository>
@@ -18,6 +19,7 @@ where
     fn allocate_order<'a, Positions: Iterator<Item = &'a Position>>(
         &self,
         repository: &Repository,
+        engine_id: Uuid,
         order: &mut OrderEvent,
         instrument_positions: Positions,
         signal_suggest_info: SuggestInfo,
@@ -38,6 +40,7 @@ where
     fn allocate_order<'a, Positions: Iterator<Item = &'a Position>>(
         &self,
         _repository: &Repository,
+        _engine_id: Uuid,
         order: &mut OrderEvent,
         instrument_positions: Positions,
         signal_suggest_info: SuggestInfo,
@@ -92,6 +95,7 @@ mod tests {
 
         allocator.allocate_order(
             &repository(),
+            Uuid::new_v4(),
             &mut input_order,
             vec![input_position.clone()].iter(),
             input_signal_strength,
@@ -119,6 +123,7 @@ mod tests {
 
         allocator.allocate_order(
             &repository(),
+            Uuid::new_v4(),
             &mut input_order,
             vec![input_position.clone()].iter(),
             input_signal_strength,
@@ -146,6 +151,7 @@ mod tests {
 
         allocator.allocate_order(
             &repository(),
+            Uuid::new_v4(),
             &mut input_order,
             vec![].iter(),
             input_signal_strength,
@@ -174,6 +180,7 @@ mod tests {
 
         allocator.allocate_order(
             &repository(),
+            Uuid::new_v4(),
             &mut input_order,
             vec![].iter(),
             input_signal_strength,
@@ -203,6 +210,7 @@ mod tests {
 
         allocator.allocate_order(
             &repository(),
+            Uuid::new_v4(),
             &mut input_order,
             vec![].iter(),
             input_signal_strength,
@@ -231,6 +239,7 @@ mod tests {
 
         allocator.allocate_order(
             &repository(),
+            Uuid::new_v4(),
             &mut input_order,
             vec![].iter(),
             input_signal_strength,
