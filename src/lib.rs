@@ -324,6 +324,7 @@ pub mod test_util {
             quantity: 1.0,
             order_type: OrderType::default(),
             signal_extra: SignalExtra::default(),
+            position_signal_id: None,
         }
     }
 
@@ -340,6 +341,7 @@ pub mod test_util {
             fill_value_gross: 100.0,
             fees: Fees::default(),
             signal_extra: SignalExtra::default(),
+            position_signal_id: None,
         }
     }
 

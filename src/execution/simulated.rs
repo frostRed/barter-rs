@@ -35,6 +35,7 @@ impl ExecutionClient for SimulatedExecution {
             fill_value_gross,
             fees: self.calculate_fees(&fill_value_gross),
             signal_extra: order.signal_extra,
+            position_signal_id: order.position_signal_id,
         })
     }
 }

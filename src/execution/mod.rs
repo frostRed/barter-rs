@@ -37,6 +37,8 @@ pub struct FillEvent {
     /// All fee types incurred when executing an [`OrderEvent`], and their associated [`FeeAmount`].
     pub fees: Fees,
     pub signal_extra: SignalExtra,
+    /// If it is to fill an existing position
+    pub position_signal_id: Option<Uuid>,
 }
 
 impl FillEvent {
@@ -82,6 +84,7 @@ pub struct FillEventBuilder {
     pub fill_value_gross: Option<f64>,
     pub fees: Option<Fees>,
     pub signal_extra: Option<SignalExtra>,
+    pub position_signal_id: Option<Uuid>,
 }
 
 impl FillEventBuilder {
@@ -159,6 +162,13 @@ impl FillEventBuilder {
         }
     }
 
+    pub fn position_signal_id(self, value: Uuid) -> Self {
+        Self {
+            position_signal_id: Some(value),
+            ..self
+        }
+    }
+
     pub fn build(self) -> Result<FillEvent, ExecutionError> {
         Ok(FillEvent {
             signal_id: self
@@ -187,6 +197,7 @@ impl FillEventBuilder {
             signal_extra: self
                 .signal_extra
                 .ok_or(ExecutionError::BuilderIncomplete("signal_extra"))?,
+            position_signal_id: self.position_signal_id,
         })
     }
 }

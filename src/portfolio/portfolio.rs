@@ -7,7 +7,7 @@ use super::{
     },
     repository::{error::RepositoryError, BalanceHandler, PositionHandler, StatisticHandler},
     risk::OrderEvaluator,
-    Balance, FillUpdater, MarketUpdater, OrderEvent, OrderGenerator, OrderType,
+    Balance, FillUpdater, MarketUpdater, OrderEvent, OrderGenerator,
 };
 use crate::{
     event::Event,
@@ -175,17 +175,7 @@ where
         Ok((
             signal_force_exit,
             open_signal.and_then(|(signal_decision, signal_strength)| {
-                let mut order = OrderEvent {
-                    signal_id: signal.signal_id,
-                    time: Utc::now(),
-                    exchange: signal.exchange.clone(),
-                    instrument: signal.instrument.clone(),
-                    market_meta: signal.market_meta,
-                    decision: signal_decision,
-                    quantity: 0.0,
-                    order_type: OrderType::default(),
-                    signal_extra: signal.extra,
-                };
+                let mut order = OrderEvent::new(signal, signal_decision);
 
                 // Manage OrderEvent size allocation
                 self.allocation_manager.allocate_order(
@@ -225,7 +215,8 @@ where
         Ok(positions
             .into_iter()
             .map(|position| {
-                position.exit_order(
+                OrderEvent::exit_order(
+                    &position,
                     signal.signal_id,
                     signal.signal_force_exit.exchange.clone(),
                     signal.signal_force_exit.instrument.clone(),
@@ -256,7 +247,8 @@ where
             return Ok(None);
         };
         let position = position.unwrap();
-        Ok(Some(position.exit_order(
+        Ok(Some(OrderEvent::exit_order(
+            &position,
             signal.signal_id,
             signal.exchange.clone(),
             signal.instrument,
@@ -287,9 +279,12 @@ where
 
         match fill.decision {
             Decision::CloseLong | Decision::CloseShort => {
+                let existing_position_signal_id = fill
+                    .position_signal_id
+                    .ok_or(PortfolioError::PositionExit)?;
                 if let Some(mut position) = self
                     .repository
-                    .remove_position(&instrument_id, &fill.signal_id)?
+                    .remove_position(&instrument_id, &existing_position_signal_id)?
                 {
                     // EXIT SCENARIO - FillEvent for Symbol-Exchange combination with open Position
                     // Exit Position (in place mutation), & add the PositionExit event to Vec<Event>
@@ -680,6 +675,7 @@ pub mod tests {
     use crate::portfolio::position::PositionBuilder;
     use crate::portfolio::repository::error::RepositoryError;
     use crate::portfolio::risk::DefaultRisk;
+    use crate::portfolio::OrderType;
     use crate::statistic::summary::pnl::PnLReturnSummary;
     use crate::strategy::{SignalExtra, SignalForceExit};
     use crate::test_util::{fill_event, market_event_trade, position, signal};
@@ -1501,6 +1497,7 @@ pub mod tests {
             Ok({
                 Some({
                     let mut input_position = position();
+                    input_position.signal_id = Uuid::default();
                     input_position.side = Side::Buy;
                     input_position.quantity = 1.0;
                     input_position.enter_fees_total = 3.0;
@@ -1525,6 +1522,7 @@ pub mod tests {
             slippage: 1.0,
             network: 1.0,
         };
+        input_fill.position_signal_id = Some(Uuid::default());
 
         let result = portfolio.update_from_fill(&input_fill);
         let updated_repository = portfolio.repository;
@@ -1554,6 +1552,7 @@ pub mod tests {
             Ok({
                 Some({
                     let mut input_position = position();
+                    input_position.signal_id = Uuid::default();
                     input_position.side = Side::Buy;
                     input_position.quantity = 1.0;
                     input_position.enter_fees_total = 3.0;
@@ -1578,6 +1577,7 @@ pub mod tests {
             slippage: 1.0,
             network: 1.0,
         };
+        input_fill.position_signal_id = Some(Uuid::default());
 
         let result = portfolio.update_from_fill(&input_fill);
         let updated_repository = portfolio.repository;
@@ -1607,6 +1607,7 @@ pub mod tests {
             Ok({
                 Some({
                     let mut input_position = position();
+                    input_position.signal_id = Uuid::default();
                     input_position.side = Side::Sell;
                     input_position.quantity = -1.0;
                     input_position.enter_fees_total = 3.0;
@@ -1631,6 +1632,7 @@ pub mod tests {
             slippage: 1.0,
             network: 1.0,
         };
+        input_fill.position_signal_id = Some(Uuid::default());
 
         let result = portfolio.update_from_fill(&input_fill);
         let updated_repository = portfolio.repository;
@@ -1660,6 +1662,7 @@ pub mod tests {
             Ok({
                 Some({
                     let mut input_position = position();
+                    input_position.signal_id = Uuid::default();
                     input_position.side = Side::Sell;
                     input_position.quantity = -1.0;
                     input_position.enter_fees_total = 3.0;
@@ -1684,6 +1687,7 @@ pub mod tests {
             slippage: 1.0,
             network: 1.0,
         };
+        input_fill.position_signal_id = Some(Uuid::default());
 
         let result = portfolio.update_from_fill(&input_fill);
         let updated_repository = portfolio.repository;

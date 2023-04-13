@@ -1,3 +1,4 @@
+use crate::portfolio::position::Position;
 use crate::{
     data::MarketMeta,
     event::Event,
@@ -89,7 +90,11 @@ pub struct OrderEvent {
     pub quantity: f64,
     /// MARKET, LIMIT etc
     pub order_type: OrderType,
+    // provide take profit and stop loss prices
     pub signal_extra: SignalExtra,
+    // If the order is for an existing position, the signal id of the
+    // previous position needs to be provided
+    pub position_signal_id: Option<Uuid>,
 }
 
 impl OrderEvent {
@@ -99,6 +104,46 @@ impl OrderEvent {
     /// Returns a OrderEventBuilder instance.
     pub fn builder() -> OrderEventBuilder {
         OrderEventBuilder::new()
+    }
+
+    pub fn new(signal: &Signal, decision: Decision) -> Self {
+        OrderEvent {
+            signal_id: signal.signal_id,
+            time: Utc::now(),
+            exchange: signal.exchange.clone(),
+            instrument: signal.instrument.clone(),
+            market_meta: signal.market_meta,
+            decision,
+            quantity: 0.0,
+            order_type: OrderType::default(),
+            signal_extra: signal.extra,
+            position_signal_id: None,
+        }
+    }
+
+    /// generate a order to exit this position
+    pub fn exit_order(
+        position: &Position,
+        signal_id: Uuid,
+        exchange: Exchange,
+        instrument: Instrument,
+        signal_extra: Option<SignalExtra>,
+    ) -> Self {
+        OrderEvent {
+            signal_id,
+            time: Utc::now(),
+            exchange,
+            instrument,
+            market_meta: MarketMeta {
+                close: position.current_symbol_price,
+                time: position.meta.update_time,
+            },
+            decision: position.determine_exit_decision(),
+            quantity: 0.0 - position.quantity,
+            order_type: OrderType::Market,
+            signal_extra: signal_extra.unwrap_or(SignalExtra::default()),
+            position_signal_id: Some(position.signal_id),
+        }
     }
 }
 
@@ -128,6 +173,7 @@ pub struct OrderEventBuilder {
     pub quantity: Option<f64>,
     pub order_type: Option<OrderType>,
     pub signal_extra: Option<SignalExtra>,
+    pub position_signal_id: Option<Uuid>,
 }
 
 impl OrderEventBuilder {
@@ -198,6 +244,13 @@ impl OrderEventBuilder {
         }
     }
 
+    pub fn position_signal_id(self, value: Uuid) -> Self {
+        Self {
+            position_signal_id: Some(value),
+            ..self
+        }
+    }
+
     pub fn build(self) -> Result<OrderEvent, PortfolioError> {
         Ok(OrderEvent {
             signal_id: self
@@ -225,6 +278,7 @@ impl OrderEventBuilder {
             signal_extra: self
                 .signal_extra
                 .ok_or(PortfolioError::BuilderIncomplete("signal_extra"))?,
+            position_signal_id: self.position_signal_id,
         })
     }
 }
