@@ -172,3 +172,126 @@ impl<Statistic: PositionSummariser> InMemoryRepository<Statistic> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::execution::Fees;
+    use crate::portfolio::position::PositionEnterer;
+    use crate::statistic::summary::trading::TradingSummary;
+    use crate::strategy::Decision;
+    use crate::test_util::fill_event;
+    use barter_integration::model::{Exchange, Instrument, InstrumentKind};
+    use std::collections::HashSet;
+
+    fn positions(engine_id: Uuid) -> (Position, Position, Position) {
+        let mut input_fill = fill_event();
+        input_fill.decision = Decision::Long;
+        input_fill.quantity = 1.0;
+        input_fill.fill_value_gross = 100.0;
+        input_fill.fees = Fees {
+            exchange: 1.0,
+            slippage: 1.0,
+            network: 1.0,
+        };
+        input_fill.exchange = Exchange::from("binance");
+        input_fill.instrument = Instrument::from(("btc", "usdt", InstrumentKind::Spot));
+        let p1 = Position::enter(engine_id, &input_fill).unwrap();
+
+        input_fill.exchange = Exchange::from("binance");
+        input_fill.instrument = Instrument::from(("btc", "usdt", InstrumentKind::Spot));
+        input_fill.quantity = 2.0;
+        input_fill.fill_value_gross = 150.0;
+        input_fill.signal_id = Uuid::new_v4();
+        let p2 = Position::enter(engine_id, &input_fill).unwrap();
+
+        input_fill.exchange = Exchange::from("binance");
+        input_fill.instrument = Instrument::from(("eth", "usdt", InstrumentKind::Spot));
+        input_fill.quantity = 1.0;
+        input_fill.fill_value_gross = 10.0;
+        input_fill.signal_id = Uuid::new_v4();
+        let p3 = Position::enter(engine_id, &input_fill).unwrap();
+
+        (p1, p2, p3)
+    }
+
+    #[test]
+    fn set_open_position() {
+        let engine_id = Uuid::new_v4();
+        let mut repo: InMemoryRepository<TradingSummary> = InMemoryRepository::new();
+        let (btc1, btc2, _eth1) = positions(engine_id);
+        assert!(repo.set_open_position(btc1).is_ok());
+        assert!(repo.set_open_position(btc2).is_ok());
+    }
+
+    #[test]
+    fn get() {
+        let engine_id = Uuid::new_v4();
+        let mut repo: InMemoryRepository<TradingSummary> = InMemoryRepository::new();
+        let (btc1, btc2, eth1) = positions(engine_id);
+        let signal_set = HashSet::from([btc1.signal_id, btc2.signal_id, eth1.signal_id]);
+        let exchange = Exchange::from("binance");
+        let btc_instrument = Instrument::from(("btc", "usdt", InstrumentKind::Spot));
+        let eth_instrument = Instrument::from(("eth", "usdt", InstrumentKind::Spot));
+        let instrument_id = determine_instrument_id(engine_id, &exchange, &btc_instrument);
+        let markets = vec![
+            Market::new(exchange.clone(), btc_instrument.clone()),
+            Market::new(exchange.clone(), eth_instrument.clone()),
+        ];
+
+        repo.set_open_position(btc1.clone()).unwrap();
+        repo.set_open_position(btc2.clone()).unwrap();
+        repo.set_open_position(eth1.clone()).unwrap();
+
+        let positions = repo.get_open_instrument_positions(&instrument_id);
+        assert!(positions.is_ok());
+        let positions = positions.unwrap();
+        assert_eq!(positions.len(), 2);
+        assert!(signal_set.contains(&positions[0].signal_id));
+        assert!(signal_set.contains(&positions[1].signal_id));
+
+        let positions = repo.get_open_markets_positions(engine_id, markets.iter());
+        assert!(positions.is_ok());
+        let positions = positions.unwrap();
+        assert_eq!(positions.len(), 3);
+        assert!(signal_set.contains(&positions[0].signal_id));
+        assert!(signal_set.contains(&positions[1].signal_id));
+        assert!(signal_set.contains(&positions[2].signal_id));
+
+        let positions = repo.get_all_open_positions();
+        assert!(positions.is_ok());
+        let positions = positions.unwrap();
+        assert_eq!(positions.len(), 3);
+        assert!(signal_set.contains(&positions[0].signal_id));
+        assert!(signal_set.contains(&positions[1].signal_id));
+        assert!(signal_set.contains(&positions[2].signal_id));
+
+        let position = repo.get_open_position(&instrument_id, &btc2.signal_id);
+        assert!(position.is_ok());
+        let position = position.unwrap();
+        assert!(position.is_some());
+        let position = position.unwrap();
+        assert_eq!(position.signal_id, btc2.signal_id)
+    }
+
+    #[test]
+    fn remove() {
+        let engine_id = Uuid::new_v4();
+        let mut repo: InMemoryRepository<TradingSummary> = InMemoryRepository::new();
+        let (btc1, btc2, eth1) = positions(engine_id);
+        let exchange = Exchange::from("binance");
+        let btc_instrument = Instrument::from(("btc", "usdt", InstrumentKind::Spot));
+        let instrument_id = determine_instrument_id(engine_id, &exchange, &btc_instrument);
+
+        repo.set_open_position(btc1.clone()).unwrap();
+        repo.set_open_position(btc2.clone()).unwrap();
+        repo.set_open_position(eth1.clone()).unwrap();
+
+        let position = repo.remove_position(&instrument_id, &btc2.signal_id);
+        assert!(position.is_ok());
+        let position = position.unwrap();
+        assert!(position.is_some());
+        let position = position.unwrap();
+        assert_eq!(position.signal_id, btc2.signal_id)
+    }
+}
