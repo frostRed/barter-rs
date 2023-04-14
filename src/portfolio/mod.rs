@@ -44,13 +44,18 @@ pub trait MarketUpdater {
     ) -> Result<Vec<PositionUpdateByMarket>, PortfolioError>;
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum OrderGeneratorResult {
+    OnlyExit(SignalInstrumentPositionsExit),
+    OnlyNew(OrderEvent),
+    ExitAndNew(SignalInstrumentPositionsExit),
+    None,
+}
+
 /// May generate an [`OrderEvent`] from an input advisory [`Signal`].
 pub trait OrderGenerator {
     /// May generate an [`OrderEvent`] after analysing an input advisory [`Signal`].
-    fn generate_order(
-        &mut self,
-        signal: &Signal,
-    ) -> Result<(Option<SignalInstrumentPositionsExit>, Option<OrderEvent>), PortfolioError>;
+    fn generate_order(&mut self, signal: &Signal) -> Result<OrderGeneratorResult, PortfolioError>;
 
     /// Generates exit [`OrderEvent`]s if there are some open [`Position`](position::Position)s
     /// associated with the input [`SignalInstrumentPositionsExit`]'s [`InstrumentId`](position::InstrumentId).

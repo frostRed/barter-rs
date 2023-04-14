@@ -1,4 +1,5 @@
 use super::{error::EngineError, Command};
+use crate::portfolio::OrderGeneratorResult;
 use crate::strategy::SignalInstrumentPositionsExit;
 use crate::{
     data::{Feed, MarketGenerator},
@@ -185,25 +186,43 @@ where
                     }
 
                     Event::Signal(signal) => {
-                        let (close_signal, open_order) = self
-                            .portfolio
-                            .lock()
-                            .generate_order(&signal)
-                            .expect("failed to generate order");
-                        if let Some(close_signal) = close_signal {
-                            for order in self
-                                .portfolio
+                        let generate_order_result = {
+                            self.portfolio
                                 .lock()
-                                .generate_instrument_exit_order(close_signal)
-                                .expect("failed to generate forced exit orders")
-                            {
+                                .generate_order(&signal)
+                                .expect("failed to generate order")
+                        };
+                        match generate_order_result {
+                            OrderGeneratorResult::OnlyExit(close_signal) => {
+                                for order in self
+                                    .portfolio
+                                    .lock()
+                                    .generate_instrument_exit_order(close_signal)
+                                    .expect("failed to generate forced exit orders")
+                                {
+                                    self.event_tx.send(Event::OrderNew(order.clone()));
+                                    self.event_q.push_back(Event::OrderNew(order));
+                                }
+                            }
+                            OrderGeneratorResult::OnlyNew(order) => {
                                 self.event_tx.send(Event::OrderNew(order.clone()));
                                 self.event_q.push_back(Event::OrderNew(order));
                             }
-                        }
-                        if let Some(order) = open_order {
-                            self.event_tx.send(Event::OrderNew(order.clone()));
-                            self.event_q.push_back(Event::OrderNew(order));
+                            OrderGeneratorResult::ExitAndNew(close_signal) => {
+                                for order in self
+                                    .portfolio
+                                    .lock()
+                                    .generate_instrument_exit_order(close_signal)
+                                    .expect("failed to generate forced exit orders")
+                                {
+                                    self.event_tx.send(Event::OrderNew(order.clone()));
+                                    self.event_q.push_back(Event::OrderNew(order));
+                                }
+
+                                // signal push back again, to generate open order
+                                self.event_q.push_back(Event::Signal(signal));
+                            }
+                            OrderGeneratorResult::None => {}
                         }
                     }
                     Event::SignalPositionExit(signal) => {

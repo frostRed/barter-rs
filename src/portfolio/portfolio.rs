@@ -13,6 +13,7 @@ use crate::{
     event::Event,
     execution::FillEvent,
     portfolio::position::PositionUpdateByMarket,
+    portfolio::OrderGeneratorResult,
     statistic::summary::{Initialiser, PositionSummariser},
     strategy::{
         Decision, Signal, SignalForceExit, SignalInstrumentPositionsExit, SignalPositionExit,
@@ -145,10 +146,7 @@ where
     RiskManager: OrderEvaluator<Repository>,
     Statistic: Initialiser + PositionSummariser,
 {
-    fn generate_order(
-        &mut self,
-        signal: &Signal,
-    ) -> Result<(Option<SignalInstrumentPositionsExit>, Option<OrderEvent>), PortfolioError> {
+    fn generate_order(&mut self, signal: &Signal) -> Result<OrderGeneratorResult, PortfolioError> {
         // Determine the instrument_id & associated Option<Position> related to input SignalEvent
         let instrument_id =
             determine_instrument_id(self.engine_id, &signal.exchange, &signal.instrument);
@@ -158,36 +156,51 @@ where
 
         // If signal is advising to open a new Position rather than close one, check we have cash
         if positions.is_empty() && self.no_cash_to_enter_new_position()? {
-            return Ok((None, None));
+            return Ok(OrderGeneratorResult::None);
         }
 
         // Parse signals from Strategy to determine net signal decision & associated strength
-        let (close_signal, open_signal) = parse_signal_suggest(&positions, &signal.suggest);
-
-        let signal_force_exit = close_signal.map(|_| SignalInstrumentPositionsExit {
-            signal_id: signal.signal_id,
-            signal_force_exit: SignalForceExit {
-                time: signal.time,
-                exchange: signal.exchange.clone(),
-                instrument: signal.instrument.clone(),
-            },
-        });
-        Ok((
-            signal_force_exit,
-            open_signal.and_then(|(signal_decision, signal_strength)| {
-                let mut order = OrderEvent::new(signal, signal_decision);
-
+        match parse_signal_suggest(&positions, &signal.suggest) {
+            (Some(_), Some(_)) => {
+                let exit = SignalInstrumentPositionsExit {
+                    signal_id: signal.signal_id,
+                    signal_force_exit: SignalForceExit {
+                        time: signal.time,
+                        exchange: signal.exchange.clone(),
+                        instrument: signal.instrument.clone(),
+                    },
+                };
+                Ok(OrderGeneratorResult::ExitAndNew(exit))
+            }
+            (Some(_), None) => {
+                let exit = SignalInstrumentPositionsExit {
+                    signal_id: signal.signal_id,
+                    signal_force_exit: SignalForceExit {
+                        time: signal.time,
+                        exchange: signal.exchange.clone(),
+                        instrument: signal.instrument.clone(),
+                    },
+                };
+                Ok(OrderGeneratorResult::OnlyExit(exit))
+            }
+            (None, Some((open_decision, open_strength))) => {
+                let mut order = OrderEvent::new(signal, open_decision);
                 // Manage OrderEvent size allocation
                 self.allocation_manager.allocate_order(
                     &self.repository,
                     self.engine_id,
                     &mut order,
                     positions.iter(),
-                    *signal_strength,
+                    *open_strength,
                 );
-                self.risk_manager.evaluate_order(&self.repository, order)
-            }),
-        ))
+                if let Some(new_order) = self.risk_manager.evaluate_order(&self.repository, order) {
+                    Ok(OrderGeneratorResult::OnlyNew(new_order))
+                } else {
+                    Ok(OrderGeneratorResult::None)
+                }
+            }
+            (None, None) => Ok(OrderGeneratorResult::None),
+        }
     }
 
     fn generate_instrument_exit_order(
@@ -1199,9 +1212,9 @@ pub mod tests {
         // Input SignalEvent
         let input_signal = signal();
 
-        let (close_signal, actual) = portfolio.generate_order(&input_signal).unwrap();
+        let order = portfolio.generate_order(&input_signal).unwrap();
 
-        assert!(close_signal.is_none() && actual.is_none())
+        assert_eq!(order, OrderGeneratorResult::None)
     }
 
     #[test]
@@ -1221,9 +1234,9 @@ pub mod tests {
         // Input SignalEvent
         let input_signal = signal();
 
-        let (close_signal, actual) = portfolio.generate_order(&input_signal).unwrap();
+        let order = portfolio.generate_order(&input_signal).unwrap();
 
-        assert!(close_signal.is_none() && actual.is_none())
+        assert_eq!(order, OrderGeneratorResult::None)
     }
 
     #[test]
@@ -1244,9 +1257,10 @@ pub mod tests {
         let mut input_signal = signal();
         input_signal.suggest = Suggest::new_long(SuggestInfo::new_only_strength(1.0));
 
-        let (_close_signal, actual) = portfolio.generate_order(&input_signal).unwrap();
-
-        assert_eq!(actual.unwrap().decision, Decision::Long)
+        match portfolio.generate_order(&input_signal).unwrap() {
+            OrderGeneratorResult::OnlyNew(order) => assert_eq!(order.decision, Decision::Long),
+            _ => assert!(false),
+        }
     }
 
     #[test]
@@ -1267,9 +1281,10 @@ pub mod tests {
         let mut input_signal = signal();
         input_signal.suggest = Suggest::new_short(SuggestInfo::new_only_strength(1.0));
 
-        let (_close_signal, actual) = portfolio.generate_order(&input_signal).unwrap();
-
-        assert_eq!(actual.unwrap().decision, Decision::Short)
+        match portfolio.generate_order(&input_signal).unwrap() {
+            OrderGeneratorResult::OnlyNew(order) => assert_eq!(order.decision, Decision::Short),
+            _ => assert!(false),
+        }
     }
 
     #[test]
@@ -1296,9 +1311,10 @@ pub mod tests {
         let mut input_signal = signal();
         input_signal.suggest = Suggest::new_short(SuggestInfo::new_only_strength(1.0));
 
-        let (close_signal, actual) = portfolio.generate_order(&input_signal).unwrap();
-
-        assert!(close_signal.is_some() && actual.is_none())
+        match portfolio.generate_order(&input_signal).unwrap() {
+            OrderGeneratorResult::OnlyExit(_close) => assert!(true),
+            _ => assert!(false),
+        }
     }
 
     #[test]
@@ -1325,9 +1341,10 @@ pub mod tests {
         let mut input_signal = signal();
         input_signal.suggest = Suggest::new_long(SuggestInfo::new_only_strength(1.0));
 
-        let (close_signal, actual) = portfolio.generate_order(&input_signal).unwrap();
-
-        assert!(close_signal.is_some() && actual.is_none())
+        match portfolio.generate_order(&input_signal).unwrap() {
+            OrderGeneratorResult::OnlyExit(_close) => assert!(true),
+            _ => assert!(false),
+        }
     }
 
     #[test]
