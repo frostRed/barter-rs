@@ -263,16 +263,18 @@ where
                     }
 
                     Event::OrderNew(order) => {
-                        let fill = self
-                            .execution
-                            .generate_fill(&order)
-                            .expect("failed to generate Fill");
+                        let fill = {
+                            let fill = self
+                                .execution
+                                .generate_fill(&order)
+                                .expect("failed to generate Fill");
+                            self.event_tx.send(Event::Fill(fill.clone()));
+                            fill
+                        };
 
-                        self.event_tx.send(Event::Fill(fill.clone()));
-                        self.event_q.push_back(Event::Fill(fill));
-                    }
-
-                    Event::Fill(fill) => {
+                        // It is processed immediately afterwards to prevent the intermediate
+                        // balance from being updated when there are two OrderEvents at the
+                        // same time
                         let fill_side_effect_events = self
                             .portfolio
                             .lock()
@@ -280,6 +282,10 @@ where
                             .expect("failed to update Portfolio from fill");
 
                         self.event_tx.send_many(fill_side_effect_events);
+                    }
+
+                    Event::Fill(_fill) => {
+                        panic!("FillEvent can only be processed at the same time as OrderEvent");
                     }
                     _ => {}
                 }
